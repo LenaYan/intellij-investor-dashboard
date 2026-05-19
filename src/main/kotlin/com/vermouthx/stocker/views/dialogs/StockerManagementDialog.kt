@@ -4,9 +4,9 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.ui.Messages
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.components.JBList
-import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.AlignY
@@ -20,6 +20,7 @@ import com.vermouthx.stocker.utils.StockerPinyinUtil
 import com.vermouthx.stocker.utils.StockerQuoteHttpUtil
 import com.vermouthx.stocker.views.StockerTableView
 import java.awt.BorderLayout
+import java.awt.FlowLayout
 import java.awt.event.ActionEvent
 import java.util.concurrent.CompletableFuture
 import javax.swing.*
@@ -158,6 +159,7 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
         pane.removeAll()
         
         val list = JBList(listModel)
+        list.selectionMode = ListSelectionModel.MULTIPLE_INTERVAL_SELECTION
         list.installCellRenderer { symbol ->
             // Get original name with Pinyin if enabled
             val originalName = if (setting.displayNameWithPinyin) {
@@ -250,8 +252,29 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
             BorderFactory.createEmptyBorder(8, 8, 8, 8)
         ))
         
-        // ToolbarDecorator.createPanel() already includes the list with scrolling
+        // ToolbarDecorator with remove action for batch delete (supports multi-select)
         val decorator = ToolbarDecorator.createDecorator(list)
+            .setRemoveAction {
+                val selectedIndices = list.selectedIndices
+                if (selectedIndices.isNotEmpty()) {
+                    val count = selectedIndices.size
+                    val confirmMsg = if (count == 1) {
+                        "Remove \"${listModel.getElementAt(selectedIndices[0]).code}\"?"
+                    } else {
+                        "Remove $count selected item(s)?"
+                    }
+                    val result = Messages.showYesNoDialog(
+                        pane, confirmMsg, "Confirm Delete", Messages.getQuestionIcon()
+                    )
+                    if (result == Messages.YES) {
+                        // Remove from end to start to preserve indices
+                        for (i in selectedIndices.reversed()) {
+                            listModel.removeElementAt(i)
+                        }
+                    }
+                }
+            }
+            .setRemoveActionUpdater { list.selectedIndex >= 0 }
             .setEditAction { button ->
                 val selectedIndex = list.selectedIndex
                 if (selectedIndex >= 0) {
@@ -338,9 +361,28 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
         
         val decoratedPanel = decorator.createPanel()
         
-        // Add header at top and decorated panel (which contains toolbar + list + scrollpane) below
+        // Bottom action panel with "Delete All" button
+        val actionPanel = JPanel(FlowLayout(FlowLayout.LEFT))
+        val deleteAllButton = JButton("Delete All")
+        deleteAllButton.toolTipText = "Remove all stocks in this tab"
+        deleteAllButton.addActionListener {
+            if (listModel.isEmpty) return@addActionListener
+            val result = Messages.showYesNoDialog(
+                pane,
+                "Remove all ${listModel.size()} item(s) from this tab?",
+                "Confirm Delete All",
+                Messages.getWarningIcon()
+            )
+            if (result == Messages.YES) {
+                listModel.removeAllElements()
+            }
+        }
+        actionPanel.add(deleteAllButton)
+        
+        // Add header at top, decorated panel in center, action panel at bottom
         pane.add(headerPanel, BorderLayout.NORTH)
         pane.add(decoratedPanel, BorderLayout.CENTER)
+        pane.add(actionPanel, BorderLayout.SOUTH)
         
         // Refresh the UI to show new components
         pane.revalidate()
