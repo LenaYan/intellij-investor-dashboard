@@ -353,8 +353,52 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
         
         val decoratedPanel = decorator.createPanel()
         
-        // Bottom action panel with "Delete All" button
+        // Bottom action panel with "Move to Top", "Move to Bottom", and "Delete All" buttons
         val actionPanel = JPanel(FlowLayout(FlowLayout.LEFT))
+        
+        val moveToTopButton = JButton("Move to Top")
+        moveToTopButton.toolTipText = "Move selected item(s) to the top of the list"
+        moveToTopButton.addActionListener {
+            val selectedIndices = list.selectedIndices
+            if (selectedIndices.isEmpty()) return@addActionListener
+            // Collect selected items in order
+            val selectedItems = selectedIndices.map { listModel.getElementAt(it) }
+            // Remove from end to start to preserve indices
+            for (i in selectedIndices.reversed()) {
+                listModel.removeElementAt(i)
+            }
+            // Insert at top in original order
+            for ((insertIdx, item) in selectedItems.withIndex()) {
+                listModel.insertElementAt(item, insertIdx)
+            }
+            // Re-select moved items
+            list.selectionModel.clearSelection()
+            list.addSelectionInterval(0, selectedItems.size - 1)
+        }
+        actionPanel.add(moveToTopButton)
+        
+        val moveToBottomButton = JButton("Move to Bottom")
+        moveToBottomButton.toolTipText = "Move selected item(s) to the bottom of the list"
+        moveToBottomButton.addActionListener {
+            val selectedIndices = list.selectedIndices
+            if (selectedIndices.isEmpty()) return@addActionListener
+            // Collect selected items in order
+            val selectedItems = selectedIndices.map { listModel.getElementAt(it) }
+            // Remove from end to start to preserve indices
+            for (i in selectedIndices.reversed()) {
+                listModel.removeElementAt(i)
+            }
+            // Append at bottom in original order
+            for (item in selectedItems) {
+                listModel.addElement(item)
+            }
+            // Re-select moved items
+            val newStart = listModel.size() - selectedItems.size
+            list.selectionModel.clearSelection()
+            list.addSelectionInterval(newStart, listModel.size() - 1)
+        }
+        actionPanel.add(moveToBottomButton)
+        
         val deleteAllButton = JButton("Delete All")
         deleteAllButton.toolTipText = "Remove all stocks in this tab"
         deleteAllButton.addActionListener {
