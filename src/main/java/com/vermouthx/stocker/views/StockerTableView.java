@@ -7,8 +7,10 @@ import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.table.JBTable;
 import com.vermouthx.stocker.components.StockerDefaultTableCellRender;
+import com.vermouthx.stocker.components.StockerSparklineCellRenderer;
 import com.vermouthx.stocker.components.StockerTableHeaderRender;
 import com.vermouthx.stocker.components.StockerTableModel;
+import com.vermouthx.stocker.entities.StockerIntradayData;
 import com.vermouthx.stocker.entities.StockerQuote;
 import com.vermouthx.stocker.entities.StockerSuggestion;
 import com.vermouthx.stocker.enums.StockerMarketType;
@@ -32,6 +34,7 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class StockerTableView implements Disposable {
@@ -60,6 +63,7 @@ public class StockerTableView implements Disposable {
     private final StockerDefaultTableCellRender percentRenderer = new PercentCellRenderer();
     private final StockerDefaultTableCellRender costRenderer = new CostCellRenderer();
     private final StockerDefaultTableCellRender netProfitRenderer = new NetProfitCellRenderer();
+    private final StockerSparklineCellRenderer sparklineRenderer = new StockerSparklineCellRenderer();
 
     // Sorting state
     private StockerTableHeaderRender headerRenderer;
@@ -145,6 +149,29 @@ public class StockerTableView implements Disposable {
         });
     }
 
+    /**
+     * Update sparkline intraday data for the given codes.
+     */
+    public void syncIntradayData(Map<String, StockerIntradayData> intradayMap) {
+        SwingUtilities.invokeLater(() -> {
+            synchronized (tbModel) {
+                int sparklineColIndex = tbModel.findColumn(sparklineColumn);
+                if (sparklineColIndex == -1) return;
+
+                for (int row = 0; row < tbModel.getRowCount(); row++) {
+                    Object codeObj = tbModel.getValueAt(row, 0);
+                    if (codeObj != null) {
+                        StockerIntradayData data = intradayMap.get(codeObj.toString());
+                        if (data != null) {
+                            tbModel.setValueAt(data, row, sparklineColIndex);
+                            tbModel.fireTableCellUpdated(row, sparklineColIndex);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     private void syncColorPatternSetting() {
         StockerSetting setting = StockerSetting.Companion.getInstance();
         switch (setting.getQuoteColorPattern()) {
@@ -152,16 +179,19 @@ public class StockerTableView implements Disposable {
                 upColor = JBColor.RED;
                 downColor = JBColor.GREEN;
                 zeroColor = JBColor.GRAY;
+                sparklineRenderer.setRedUp(true);
                 break;
             case GREEN_UP_RED_DOWN:
                 upColor = JBColor.GREEN;
                 downColor = JBColor.RED;
                 zeroColor = JBColor.GRAY;
+                sparklineRenderer.setRedUp(false);
                 break;
             default:
                 upColor = JBColor.foreground();
                 downColor = JBColor.foreground();
                 zeroColor = JBColor.foreground();
+                sparklineRenderer.setRedUp(true);
                 break;
         }
     }
@@ -259,6 +289,7 @@ public class StockerTableView implements Disposable {
     private static final String costPriceColumn = StockerTableColumn.COST_PRICE.name();
     private static final String holdingsColumn = StockerTableColumn.HOLDINGS.name();
     private static final String netProfitColumn = StockerTableColumn.NET_PROFIT.name();
+    private static final String sparklineColumn = StockerTableColumn.SPARKLINE.name();
     private static final List<String> allColumnNames;
 
     static {
@@ -294,14 +325,14 @@ public class StockerTableView implements Disposable {
             }
         });
 
-        tbModel.setColumnIdentifiers(new String[]{codeColumn, nameColumn, currentColumn, openingColumn, closeColumn, lowColumn, highColumn, changeColumn, percentColumn, costPriceColumn, holdingsColumn, netProfitColumn});
+        tbModel.setColumnIdentifiers(new String[]{codeColumn, nameColumn, currentColumn, openingColumn, closeColumn, lowColumn, highColumn, changeColumn, percentColumn, costPriceColumn, holdingsColumn, netProfitColumn, sparklineColumn});
 
         tbBody.setModel(tbModel);
         tbBody.setAutoCreateColumnsFromModel(false);
         updateLocalizedHeaders();
 
         // Table grid styling
-        tbBody.setRowHeight(26);
+        tbBody.setRowHeight(32);
         tbBody.setIntercellSpacing(new Dimension(0, 1));
         tbBody.setShowGrid(true);
         tbBody.setShowVerticalLines(false);
@@ -533,6 +564,18 @@ public class StockerTableView implements Disposable {
         });
     }
 
+    /**
+     * Broadcast intraday data to all active table views.
+     */
+    public static void syncAllIntradayData(Map<String, StockerIntradayData> intradayMap) {
+        if (intradayMap.isEmpty()) return;
+        synchronized (tableViews) {
+            for (StockerTableView view : tableViews) {
+                view.syncIntradayData(intradayMap);
+            }
+        }
+    }
+
     public void refreshFinancialColumns() {
         StockerSetting setting = StockerSetting.Companion.getInstance();
         int codeColumnIndex = tbModel.findColumn(codeColumn);
@@ -623,6 +666,12 @@ public class StockerTableView implements Disposable {
         TableColumn netProfit = getColumnIfPresent(netProfitColumn);
         if (netProfit != null) {
             netProfit.setCellRenderer(netProfitRenderer);
+        }
+        TableColumn sparkline = getColumnIfPresent(sparklineColumn);
+        if (sparkline != null) {
+            sparkline.setCellRenderer(sparklineRenderer);
+            sparkline.setPreferredWidth(120);
+            sparkline.setMinWidth(80);
         }
     }
 
@@ -774,6 +823,11 @@ public class StockerTableView implements Disposable {
         }
 
         if (columnIndex == -1) {
+            return;
+        }
+
+        // Skip sorting for non-sortable columns (sparkline)
+        if (columnName.equals(sparklineColumn)) {
             return;
         }
 

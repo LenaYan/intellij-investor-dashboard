@@ -15,7 +15,8 @@ enum class StockerTableColumn(val titleKey: String) {
     CHANGE_PERCENT("column.change.percent"),
     COST_PRICE("column.cost.price"),
     HOLDINGS("column.holdings"),
-    NET_PROFIT("column.net.profit");
+    NET_PROFIT("column.net.profit"),
+    SPARKLINE("column.sparkline");
 
     val title: String
         get() = StockerBundle.message(titleKey)
@@ -28,7 +29,8 @@ enum class StockerTableColumn(val titleKey: String) {
         fun defaultVisibleNames(): List<String> = listOf(
             NAME.name,
             CURRENT.name,
-            CHANGE_PERCENT.name
+            CHANGE_PERCENT.name,
+            SPARKLINE.name
         )
 
         @JvmStatic

@@ -118,7 +118,8 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
                             quote.getPercentage() + "%",
                             formatCostPrice(costPrice),
                             formatHoldings(holdings),
-                            formatNetProfit(quote, costPrice, holdings)
+                            formatNetProfit(quote, costPrice, holdings),
+                            null // sparkline data populated by intraday fetch
                         });
                         // Clear sort state when new rows are added
                         myTableView.clearSortState();

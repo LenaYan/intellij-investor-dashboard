@@ -9,6 +9,7 @@ import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.*
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.*
 import com.vermouthx.stocker.settings.StockerSetting
 import com.vermouthx.stocker.utils.StockerQuoteHttpUtil
+import com.vermouthx.stocker.views.StockerTableView
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
@@ -124,6 +125,24 @@ class StockerApp {
             val allPublisher = messageBus.syncPublisher(STOCK_ALL_QUOTE_UPDATE_TOPIC)
             allPublisher.syncQuotes(allStockQuotes, setting.allStockListSize)
             allPublisher.syncIndices(allStockIndices)
+
+            // Fetch intraday data for sparkline display
+            if (!shouldContinueRefresh()) return@Runnable
+            val intradayMap = mutableMapOf<String, com.vermouthx.stocker.entities.StockerIntradayData>()
+            if (setting.aShareList.isNotEmpty()) {
+                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.AShare, setting.aShareList))
+            }
+            if (!shouldContinueRefresh()) return@Runnable
+            if (setting.hkStocksList.isNotEmpty()) {
+                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.HKStocks, setting.hkStocksList))
+            }
+            if (!shouldContinueRefresh()) return@Runnable
+            if (setting.usStocksList.isNotEmpty()) {
+                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.USStocks, setting.usStocksList))
+            }
+            if (intradayMap.isNotEmpty()) {
+                StockerTableView.syncAllIntradayData(intradayMap)
+            }
         }
     }
 
