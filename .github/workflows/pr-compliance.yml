@@ -1,0 +1,165 @@
+name: PR Compliance Check
+
+on:
+  pull_request:
+    branches: [master, main, develop]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: pr-compliance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compliance:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed
+        run: |
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '\.(kt|java)$' || true)
+          if [ -z "$FILES" ]; then
+            echo "has_source=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_source=true" >> $GITHUB_OUTPUT
+            echo "$FILES" > changed_files.txt
+          fi
+
+      - name: Run compliance checks
+        if: steps.changed.outputs.has_source == 'true'
+        id: checks
+        run: |
+          BLOCKING=""
+          ADVISORY=""
+
+          # Rule 1: Hardcoded strings in UI classes (BLOCKING)
+          UI_FILES=$(cat changed_files.txt | grep -E '(views|actions|notifications|dialogs)/' || true)
+          if [ -n "$UI_FILES" ]; then
+            HARDCODED=$(echo "$UI_FILES" | xargs grep -n '"[A-Z][a-zA-Z ]*"' 2>/dev/null | \
+              grep -v 'LOG\.\|logger\.\|@\|"Stocker"\|plugin\.xml\|const\|companion' | \
+              grep -v 'StockerBundle\|message(' | head -10 || true)
+            if [ -n "$HARDCODED" ]; then
+              BLOCKING="${BLOCKING}### Hardcoded UI Strings\n${HARDCODED}\n\n"
+            fi
+          fi
+
+          # Rule 2: Direct Thread usage (BLOCKING)
+          THREAD_USAGE=$(cat changed_files.txt | xargs grep -n 'Thread(\|Thread\.sleep\|Executors\.new' 2>/dev/null | head -10 || true)
+          if [ -n "$THREAD_USAGE" ]; then
+            BLOCKING="${BLOCKING}### Direct Thread Usage\n${THREAD_USAGE}\n\n"
+          fi
+
+          # Rule 3: Action registration check (BLOCKING)
+          NEW_ACTIONS=$(cat changed_files.txt | grep 'actions/' || true)
+          if [ -n "$NEW_ACTIONS" ]; then
+            for f in $NEW_ACTIONS; do
+              CLASS=$(grep -o 'class Stocker[A-Za-z]*Action' "$f" 2>/dev/null | sed 's/class //' || true)
+              if [ -n "$CLASS" ] && ! grep -q "$CLASS" src/main/resources/META-INF/plugin.xml 2>/dev/null; then
+                BLOCKING="${BLOCKING}### Unregistered Action\n\`$f\`: \`$CLASS\` not found in plugin.xml\n\n"
+              fi
+            done
+          fi
+
+          # Rule 4: Stocker prefix convention (ADVISORY)
+          MISSING_PREFIX=$(cat changed_files.txt | xargs grep -n '^class \|^object \|^abstract class \|^open class ' 2>/dev/null | \
+            grep -v 'Stocker\|Companion\|internal\|private' | head -10 || true)
+          if [ -n "$MISSING_PREFIX" ]; then
+            ADVISORY="${ADVISORY}### Missing Stocker Prefix\n${MISSING_PREFIX}\n\n"
+          fi
+
+          # Rule 5: Message-bus listener without notifier (ADVISORY)
+          NEW_LISTENERS=$(cat changed_files.txt | grep 'listeners/' || true)
+          if [ -n "$NEW_LISTENERS" ]; then
+            for f in $NEW_LISTENERS; do
+              if echo "$f" | grep -q 'Listener'; then
+                NOTIFIER=$(echo "$f" | sed 's/Listener/Notifier/')
+                if [ ! -f "$NOTIFIER" ]; then
+                  ADVISORY="${ADVISORY}### Listener Without Notifier\n\`$f\` has no matching Notifier file\n\n"
+                fi
+              fi
+            done
+          fi
+
+          # Set outputs
+          if [ -n "$BLOCKING" ]; then
+            echo "has_blocking=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_blocking=false" >> $GITHUB_OUTPUT
+          fi
+
+          {
+            echo "blocking<<EOF"
+            echo -e "$BLOCKING"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+          {
+            echo "advisory<<EOF"
+            echo -e "$ADVISORY"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Post PR comment
+        if: always() && steps.changed.outputs.has_source == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const hasBlocking = '${{ steps.checks.outputs.has_blocking }}' === 'true';
+            const blocking = `${{ steps.checks.outputs.blocking }}`;
+            const advisory = `${{ steps.checks.outputs.advisory }}`;
+
+            let body = '';
+            if (!hasBlocking && !advisory.trim()) {
+              body = '## ✅ Compliance Check — Passed\n\nNo violations detected in changed source files.';
+            } else {
+              body = '## 🔍 Compliance Check Report\n\n';
+              if (blocking.trim()) {
+                body += '### 🔴 BLOCKING Violations\n\n' + blocking + '\n';
+              }
+              if (advisory.trim()) {
+                body += '### 🟡 ADVISORY Findings\n\n' + advisory + '\n';
+              }
+              if (!blocking.trim()) {
+                body += '\n---\n✅ No blocking violations. Advisory items are recommendations.';
+              }
+            }
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes('Compliance Check'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Fail on blocking violations
+        if: steps.checks.outputs.has_blocking == 'true'
+        run: |
+          echo "::error::Blocking compliance violations found. See PR comment for details."
+          exit 1
+
+      - name: Skip — no source files changed
+        if: steps.changed.outputs.has_source == 'false'
+        run: echo "No .kt or .java files changed — compliance check skipped."
