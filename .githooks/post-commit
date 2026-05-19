@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""
+Stocker post-commit hook — Domain Contract Hint
+Prints relevant domain contracts to review based on committed file paths.
+Never blocks a commit.
+"""
+import subprocess
+import sys
+
+# ANSI color codes
+BOLD = "\033[1m"
+CYAN = "\033[36m"
+YELLOW = "\033[33m"
+DIM = "\033[2m"
+RESET = "\033[0m"
+
+# Map file path patterns to domain categories
+PATH_PATTERNS = {
+    "UI_STATE": [
+        "views/", "components/", "dialogs/", "windows/",
+        "StockerTableModel", "StockerTableView", "StockerToolWindow"
+    ],
+    "SERVICE_API": [
+        "utils/StockerQuoteHttpUtil", "utils/StockerSuggestHttpUtil",
+        "utils/StockerHttpClientPool", "utils/StockerQuoteParser"
+    ],
+    "DATA_MODEL": [
+        "entities/", "enums/"
+    ],
+    "ASYNC_PATTERNS": [
+        "StockerAppManager", "StockerHttpClientPool",
+        "activities/"
+    ],
+    "TESTING": [
+        "src/test/"
+    ],
+    "DEPENDENCY": [
+        "build.gradle.kts", "gradle.properties", "settings.gradle.kts"
+    ],
+    "SETTINGS": [
+        "settings/"
+    ],
+}
+
+# Map categories to domain contract files (primary, secondary)
+CONTRACT_MAP = {
+    "UI_STATE": (
+        ["ui-state-patterns.md"],
+        ["naming-and-file-placement.md", "async-patterns.md"]
+    ),
+    "SERVICE_API": (
+        ["service-api-surface-and-boundaries.md"],
+        ["error-handling.md", "async-patterns.md"]
+    ),
+    "DATA_MODEL": (
+        ["naming-and-file-placement.md"],
+        ["module-boundaries.md"]
+    ),
+    "ASYNC_PATTERNS": (
+        ["async-patterns.md"],
+        ["error-handling.md"]
+    ),
+    "TESTING": (
+        ["testing-defaults.md"],
+        []
+    ),
+    "DEPENDENCY": (
+        ["dependency-policy.md"],
+        ["module-boundaries.md"]
+    ),
+    "SETTINGS": (
+        ["storage-and-cache.md"],
+        ["ui-state-patterns.md"]
+    ),
+}
+
+
+def get_changed_files():
+    result = subprocess.run(
+        ["git", "diff-tree", "--no-commit-id", "-r", "--name-only", "HEAD"],
+        capture_output=True, text=True
+    )
+    return result.stdout.strip().split("\n") if result.stdout.strip() else []
+
+
+def classify_files(files):
+    categories = set()
+    for f in files:
+        for category, patterns in PATH_PATTERNS.items():
+            if any(p in f for p in patterns):
+                categories.add(category)
+    return categories
+
+
+def main():
+    files = get_changed_files()
+    if not files:
+        return
+
+    categories = classify_files(files)
+    if not categories:
+        return
+
+    primary = set()
+    secondary = set()
+
+    for cat in categories:
+        if cat in CONTRACT_MAP:
+            p, s = CONTRACT_MAP[cat]
+            primary.update(p)
+            secondary.update(s)
+
+    # Remove from secondary anything already in primary
+    secondary -= primary
+
+    if not primary:
+        return
+
+    print(f"\n{BOLD}{CYAN}📋 Domain Contract Hint{RESET}")
+    print(f"{CYAN}{'─' * 40}{RESET}")
+
+    print(f"  {BOLD}Primary contracts to review:{RESET}")
+    for contract in sorted(primary):
+        print(f"  {YELLOW}● {contract}{RESET}")
+
+    if secondary:
+        print(f"  {DIM}Secondary (possibly affected):{RESET}")
+        for contract in sorted(secondary):
+            print(f"  {DIM}○ {contract}{RESET}")
+
+    if len(primary) + len(secondary) >= 3:
+        print(f"\n  {DIM}💡 Tip: Multiple contracts affected — consider running the architecture-advisor skill{RESET}")
+
+    print(f"{CYAN}{'─' * 40}{RESET}")
+    print(f"  {DIM}Contracts: .gitconfig/copilot/domains/common_domains/{RESET}\n")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        # Never block a commit
+        pass
