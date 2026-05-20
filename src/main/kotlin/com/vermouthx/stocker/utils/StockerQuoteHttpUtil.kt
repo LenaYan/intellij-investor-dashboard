@@ -15,17 +15,22 @@ object StockerQuoteHttpUtil {
 
     /**
      * Build the full prefixed code for an A-share symbol.
-     * If the code already has sh/sz prefix, return as-is (lowercased).
+     * If the code already has sh/sz/bj prefix, return as-is (lowercased).
      * Otherwise, determine prefix: Shanghai (sh) for codes starting with 6, 9, 5;
+     * Beijing (bj) for codes starting with 8, 4 (or 9 with length considerations);
      * Shenzhen (sz) for all others.
      */
     fun prefixedAShareCode(code: String): String {
         val lower = code.lowercase()
-        if (lower.startsWith("sh") || lower.startsWith("sz")) {
+        if (lower.startsWith("sh") || lower.startsWith("sz") || lower.startsWith("bj")) {
             return lower
         }
         val prefix = when (lower[0]) {
-            '6', '9', '5' -> "sh"
+            '6' -> "sh"
+            '0', '1', '2', '3' -> "sz"
+            '8', '4' -> "bj"
+            '9' -> if (lower.startsWith("92") || lower.startsWith("93")) "bj" else "sh"
+            '5' -> "sh"
             else -> "sz"
         }
         return "$prefix$lower"
@@ -120,7 +125,7 @@ object StockerQuoteHttpUtil {
                     StockerMarketType.USStocks -> "us${code.uppercase()}"
                     StockerMarketType.Crypto -> continue // Crypto not supported for intraday
                 }
-                val rawCode = if (prefixedCode.startsWith("sh") || prefixedCode.startsWith("sz")) {
+                val rawCode = if (prefixedCode.startsWith("sh") || prefixedCode.startsWith("sz") || prefixedCode.startsWith("bj")) {
                     prefixedCode.substring(2)
                 } else {
                     code
@@ -129,7 +134,9 @@ object StockerQuoteHttpUtil {
                 val httpGet = HttpGet(url)
                 httpClientPool.client().execute(httpGet).use { response ->
                     val responseText = EntityUtils.toString(response.entity, "UTF-8")
-                    parseIntradayResponse(code, responseText)?.let { result[code] = it }
+                    // Use uppercase rawCode as key to match table display (parser strips prefix)
+                    val mapKey = rawCode.uppercase()
+                    parseIntradayResponse(mapKey, responseText)?.let { result[mapKey] = it }
                 }
             } catch (e: Exception) {
                 log.warn("Failed to fetch intraday data for $code: ${e.message}")

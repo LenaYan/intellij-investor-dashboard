@@ -48,7 +48,7 @@ object StockerQuoteParser {
                 StockerMarketType.AShare -> {
                     val rawCode = textArray[0]
                     // Strip sh/sz prefix added for API request
-                    val code = if (rawCode.length > 2 && (rawCode.startsWith("sh") || rawCode.startsWith("sz"))) {
+                    val code = if (rawCode.length > 2 && (rawCode.startsWith("sh") || rawCode.startsWith("sz") || rawCode.startsWith("bj"))) {
                         rawCode.substring(2).uppercase()
                     } else {
                         rawCode.uppercase()
@@ -163,7 +163,7 @@ object StockerQuoteParser {
                     val code = when (marketType) {
                         StockerMarketType.AShare -> {
                             val raw = text.subSequence(2, text.indexOfFirst { c -> c == '=' }).toString()
-                            if (raw.startsWith("sh") || raw.startsWith("sz")) raw.substring(2) else raw
+                            if (raw.startsWith("sh") || raw.startsWith("sz") || raw.startsWith("bj")) raw.substring(2) else raw
                         }
                         StockerMarketType.HKStocks, StockerMarketType.USStocks -> text.subSequence(4,
                             text.indexOfFirst { c -> c == '=' })
