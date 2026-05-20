@@ -14,16 +14,21 @@ object StockerQuoteHttpUtil {
     private val httpClientPool = StockerHttpClientPool(log)
 
     /**
-     * Determine the exchange prefix for an A-share code.
-     * Shanghai (sh): starts with 6, 9, 5
-     * Shenzhen (sz): starts with 0, 1, 2, 3, 4
+     * Build the full prefixed code for an A-share symbol.
+     * If the code already has sh/sz prefix, return as-is (lowercased).
+     * Otherwise, determine prefix: Shanghai (sh) for codes starting with 6, 9, 5;
+     * Shenzhen (sz) for all others.
      */
-    fun aSharePrefix(code: String): String {
-        if (code.isEmpty()) return "sh"
-        return when (code[0]) {
+    fun prefixedAShareCode(code: String): String {
+        val lower = code.lowercase()
+        if (lower.startsWith("sh") || lower.startsWith("sz")) {
+            return lower
+        }
+        val prefix = when (lower[0]) {
             '6', '9', '5' -> "sh"
             else -> "sz"
         }
+        return "$prefix$lower"
     }
 
     fun closeConnections() {
@@ -53,7 +58,7 @@ object StockerQuoteHttpUtil {
                 } else if (marketType == StockerMarketType.AShare) {
                     // A-share codes need sh/sz prefix based on code number
                     codes.joinToString(",") { code ->
-                        "${aSharePrefix(code)}${code.lowercase()}"
+                        prefixedAShareCode(code)
                     }
                 } else {
                     // USStocks, Crypto use lowercase with provider prefix
@@ -71,7 +76,7 @@ object StockerQuoteHttpUtil {
                 } else if (marketType == StockerMarketType.AShare) {
                     // A-share codes need sh/sz prefix based on code number
                     codes.joinToString(",") { code ->
-                        "${aSharePrefix(code)}${code.lowercase()}"
+                        prefixedAShareCode(code)
                     }
                 } else {
                     codes.joinToString(",") { code ->
@@ -110,12 +115,17 @@ object StockerQuoteHttpUtil {
         for (code in codes) {
             try {
                 val prefixedCode = when (marketType) {
-                    StockerMarketType.AShare -> "${aSharePrefix(code)}$code"
+                    StockerMarketType.AShare -> prefixedAShareCode(code)
                     StockerMarketType.HKStocks -> "hk$code"
                     StockerMarketType.USStocks -> "us${code.uppercase()}"
                     StockerMarketType.Crypto -> continue // Crypto not supported for intraday
                 }
-                val url = "https://web.ifzq.gtimg.cn/appstock/app/minute/query?_var=min_data_${code}&code=$prefixedCode"
+                val rawCode = if (prefixedCode.startsWith("sh") || prefixedCode.startsWith("sz")) {
+                    prefixedCode.substring(2)
+                } else {
+                    code
+                }
+                val url = "https://web.ifzq.gtimg.cn/appstock/app/minute/query?_var=min_data_${rawCode}&code=$prefixedCode"
                 val httpGet = HttpGet(url)
                 httpClientPool.client().execute(httpGet).use { response ->
                     val responseText = EntityUtils.toString(response.entity, "UTF-8")
@@ -193,7 +203,7 @@ object StockerQuoteHttpUtil {
                     val url = if (marketType == StockerMarketType.HKStocks) {
                         "${quoteProvider.host}$prefix${code.uppercase()}"
                     } else if (marketType == StockerMarketType.AShare) {
-                        "${quoteProvider.host}${aSharePrefix(code)}${code.lowercase()}"
+                        "${quoteProvider.host}${prefixedAShareCode(code)}"
                     } else {
                         "${quoteProvider.host}$prefix${code.lowercase()}"
                     }
@@ -215,7 +225,7 @@ object StockerQuoteHttpUtil {
                     val url = if (marketType == StockerMarketType.HKStocks || marketType == StockerMarketType.USStocks) {
                         "${quoteProvider.host}$prefix${code.uppercase()}"
                     } else if (marketType == StockerMarketType.AShare) {
-                        "${quoteProvider.host}${aSharePrefix(code)}${code.lowercase()}"
+                        "${quoteProvider.host}${prefixedAShareCode(code)}"
                     } else {
                         "${quoteProvider.host}$prefix${code.lowercase()}"
                     }
