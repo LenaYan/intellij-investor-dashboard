@@ -109,7 +109,9 @@ public class StockerSparklineCellRenderer extends JPanel implements TableCellRen
         g2d.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 
         Path2D path = new Path2D.Double();
-        double stepX = (double) width / Math.max(prices.size() - 1, 1);
+        // Use totalMinutes as the full X-axis width so the chart represents the entire trading day
+        int totalPoints = Math.max(intradayData.getTotalMinutes(), prices.size());
+        double stepX = (double) width / Math.max(totalPoints - 1, 1);
 
         for (int i = 0; i < prices.size(); i++) {
             double x = padding + i * stepX;

@@ -6,5 +6,6 @@ package com.vermouthx.stocker.entities
 data class StockerIntradayData(
     val code: String,
     val prices: List<Double>,
-    val close: Double
+    val close: Double,
+    val totalMinutes: Int = 242 // A-share default: 240 trading minutes + 1 open + 1 close
 )
