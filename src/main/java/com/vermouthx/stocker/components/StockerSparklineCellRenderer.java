@@ -2,7 +2,6 @@ package com.vermouthx.stocker.components;
 
 import com.intellij.ui.JBColor;
 import com.vermouthx.stocker.entities.StockerIntradayData;
-import com.vermouthx.stocker.settings.StockerSetting;
 
 import javax.swing.*;
 import javax.swing.table.TableCellRenderer;
@@ -19,7 +18,6 @@ public class StockerSparklineCellRenderer extends JPanel implements TableCellRen
     private static final Color DOWN_COLOR = new JBColor(new Color(22, 163, 74), new Color(34, 197, 94));
     private static final Color FLAT_COLOR = JBColor.GRAY;
     private static final Color CLOSE_LINE_COLOR = new JBColor(new Color(156, 163, 175), new Color(107, 114, 128));
-    private static final Color FOCUS_BACKGROUND = new JBColor(new Color(255, 248, 220), new Color(78, 68, 20));
 
     private StockerIntradayData intradayData;
     private boolean redUp = true;
@@ -43,24 +41,11 @@ public class StockerSparklineCellRenderer extends JPanel implements TableCellRen
 
         if (isSelected) {
             setBackground(table.getSelectionBackground());
-        } else if (isFocusedRow(table, row)) {
-            setBackground(FOCUS_BACKGROUND);
         } else {
             setBackground(table.getBackground());
         }
 
         return this;
-    }
-
-    private boolean isFocusedRow(JTable table, int row) {
-        try {
-            Object codeObj = table.getModel().getValueAt(row, 0);
-            if (codeObj != null) {
-                return StockerSetting.Companion.getInstance().isStockFocused(codeObj.toString());
-            }
-        } catch (Exception ignored) {
-        }
-        return false;
     }
 
     @Override

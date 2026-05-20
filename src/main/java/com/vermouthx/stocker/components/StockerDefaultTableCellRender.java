@@ -10,7 +10,7 @@ import java.awt.*;
 
 public class StockerDefaultTableCellRender extends DefaultTableCellRenderer {
 
-    private static final Color FOCUS_BACKGROUND = new JBColor(new Color(255, 248, 220), new Color(78, 68, 20));
+    private static final Color FOCUS_FOREGROUND = new JBColor(new Color(204, 153, 0), new Color(255, 204, 0));
 
     @Override
     public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
@@ -28,10 +28,11 @@ public class StockerDefaultTableCellRender extends DefaultTableCellRenderer {
         setBorder(dividerBorder);
 
         if (!isSelected) {
+            setBackground(table.getBackground());
             if (isFocusedRow(table, row)) {
-                setBackground(FOCUS_BACKGROUND);
+                setForeground(FOCUS_FOREGROUND);
             } else {
-                setBackground(table.getBackground());
+                setForeground(table.getForeground());
             }
         }
 
@@ -48,5 +49,17 @@ public class StockerDefaultTableCellRender extends DefaultTableCellRenderer {
         } catch (Exception ignored) {
         }
         return false;
+    }
+
+    /**
+     * Apply foreground color, respecting focus state.
+     * Focused rows always display in yellow regardless of column-specific color.
+     */
+    protected void applyForeground(JTable table, int row, Color color) {
+        if (isFocusedRow(table, row)) {
+            setForeground(FOCUS_FOREGROUND);
+        } else {
+            setForeground(color);
+        }
     }
 }

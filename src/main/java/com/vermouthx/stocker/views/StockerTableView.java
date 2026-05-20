@@ -975,6 +975,9 @@ public class StockerTableView implements Disposable {
             if (isSelected) {
                 return component;
             }
+            if (isFocusedRow(table, row)) {
+                return component;
+            }
             try {
                 int percentModelIndex = -1;
                 if (table.getModel() instanceof DefaultTableModel) {
@@ -1011,6 +1014,9 @@ public class StockerTableView implements Disposable {
             if (isSelected) {
                 return component;
             }
+            if (isFocusedRow(table, row)) {
+                return component; // already yellow from super
+            }
             if (value != null && !value.toString().isEmpty()) {
                 try {
                     Double changeValue = parseDouble(value);
@@ -1044,6 +1050,9 @@ public class StockerTableView implements Disposable {
             if (isSelected) {
                 return component;
             }
+            if (isFocusedRow(table, row)) {
+                return component;
+            }
             if (value == null) {
                 setForeground(table.getForeground());
                 return component;
@@ -1072,19 +1081,19 @@ public class StockerTableView implements Disposable {
             if (isSelected) {
                 return component;
             }
+            if (isFocusedRow(table, row)) {
+                return component;
+            }
             if (value == null || value.toString().isEmpty()) {
                 setForeground(table.getForeground());
                 return component;
             }
             try {
-                // Get the cost price value
                 Double costPrice = parseDouble(value);
                 if (costPrice == null) {
                     setForeground(table.getForeground());
                     return component;
                 }
-
-                // Get the current price from the same row
                 int currentModelIndex = -1;
                 if (table.getModel() instanceof DefaultTableModel) {
                     currentModelIndex = ((DefaultTableModel) table.getModel()).findColumn(currentColumn);
@@ -1094,9 +1103,6 @@ public class StockerTableView implements Disposable {
                     if (currentValue != null) {
                         Double currentPrice = parseDouble(currentValue);
                         if (currentPrice != null) {
-                            // If cost > current, show down color (we're losing money)
-                            // If cost < current, show up color (we're making money)
-                            // If cost == current, show zero color
                             if (costPrice > currentPrice) {
                                 setForeground(downColor);
                             } else if (costPrice < currentPrice) {
@@ -1126,6 +1132,9 @@ public class StockerTableView implements Disposable {
             Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             setHorizontalAlignment(DefaultTableCellRenderer.CENTER);
             if (isSelected) {
+                return component;
+            }
+            if (isFocusedRow(table, row)) {
                 return component;
             }
             Double netProfit = parseDouble(value);
