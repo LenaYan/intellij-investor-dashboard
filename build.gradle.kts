@@ -25,6 +25,9 @@ repositories {
 dependencies {
     implementation("org.apache.commons:commons-text:1.14.0")
     implementation("com.belerweb:pinyin4j:2.5.1")
+    // Gson is also bundled in the IntelliJ Platform, but declaring it explicitly
+    // makes our finance/ JSON parsing build-stable across platform versions.
+    implementation("com.google.code.gson:gson:2.10.1")
     intellijPlatform {
         create(properties("platformType"), properties("platformVersion"))
         pluginVerifier()

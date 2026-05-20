@@ -1,0 +1,201 @@
+package com.vermouthx.stocker.finance
+
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
+import com.intellij.util.messages.MessageBusConnection
+import com.vermouthx.stocker.entities.StockerQuote
+import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier
+import com.vermouthx.stocker.settings.StockerSetting
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
+import javax.swing.SwingUtilities
+
+/**
+ * Application-level orchestrator gluing the finance/ working directory into Stocker.
+ *
+ * Responsibilities:
+ *   - Resolve the configured finance/ directory (with sensible default ~/Claude/finance).
+ *   - Spin up [FinanceFileWatcher] when enabled.
+ *   - Subscribe to STOCK_ALL_QUOTE_UPDATE_TOPIC and run [FinanceSignalDetector] over each batch.
+ *   - Expose [state] for UI components (e.g. the Health cell renderer).
+ *
+ * Auto-disable rule: if the configured finance/ directory does not exist, we silently
+ * skip everything — users without the finance/ project never see anything new.
+ */
+@Service(Service.Level.APP)
+class FinanceBridgeService : Disposable {
+
+    private val log = Logger.getInstance(FinanceBridgeService::class.java)
+    internal val state = FinanceState()
+
+    private val started = AtomicBoolean(false)
+    private var watcher: FinanceFileWatcher? = null
+    private var detector: FinanceSignalDetector? = null
+    private var notifier: FinanceNotifier? = null
+    private var reportNotifier: FinanceReportNotifier? = null
+    private var messageBusConnection: MessageBusConnection? = null
+    private val refreshListeners = CopyOnWriteArrayList<() -> Unit>()
+
+    fun snapshot(): FinanceState.Snapshot = state.get()
+
+    /**
+     * Resolve the configured finance/ directory. Exposed so UI panels can read the
+     * reports/&lt;today&gt; directory without re-implementing the path logic.
+     */
+    fun financeDir(): Path = resolveFinanceDir()
+
+    /**
+     * Register a callback fired on the Swing thread whenever the finance/ state has been
+     * reloaded (file watcher detected a change). Returns the same callback so caller can
+     * unregister it on dispose.
+     */
+    fun addRefreshListener(listener: () -> Unit): () -> Unit {
+        refreshListeners.add(listener)
+        return listener
+    }
+
+    fun removeRefreshListener(listener: () -> Unit) {
+        refreshListeners.remove(listener)
+    }
+
+    private fun fireRefresh() {
+        if (refreshListeners.isEmpty()) return
+        SwingUtilities.invokeLater {
+            refreshListeners.forEach { l ->
+                try { l() } catch (_: Throwable) { /* keep going */ }
+            }
+        }
+    }
+
+    fun healthOf(code: String?): FinanceState.Health = state.healthOf(code)
+
+    fun watchlistEntry(code: String?): WatchlistEntry? = state.watchlistEntry(code)
+
+    /**
+     * Idempotent. Called by [com.vermouthx.stocker.activities.StockerStartupActivity].
+     * If the user has disabled the bridge or the finance/ dir is missing, becomes a no-op
+     * (and remains startable later if config changes).
+     */
+    fun startIfEnabled(project: Project) {
+        if (!started.compareAndSet(false, true)) return
+        val setting = StockerSetting.instance
+        if (!setting.financeBridgeEnabled) {
+            log.info("FinanceBridge disabled by settings.")
+            started.set(false)
+            return
+        }
+        val dir = resolveFinanceDir()
+        if (!java.nio.file.Files.isDirectory(dir)) {
+            log.info("FinanceBridge: configured dir $dir not found, bridge stays idle.")
+            started.set(false)
+            return
+        }
+
+        // 1. Notifier + detector (scoped to this project so notifications land in the right window)
+        val n = FinanceNotifier(project)
+        notifier = n
+        detector = FinanceSignalDetector(
+            notifier = n,
+            state = state,
+            config = {
+                FinanceSignalDetector.Config(
+                    anomalyPct = setting.anomalyThresholdPct,
+                    strongAnomalyPct = setting.anomalyStrongThresholdPct,
+                    notifyAnomaly = setting.financeNotifyAnomaly,
+                    notifyTriggers = setting.financeNotifyTriggers,
+                )
+            }
+        )
+
+        // 2.b Report-event notifier (overnight-brief / longhubang first-seen toasts)
+        val rn = FinanceReportNotifier(project, state)
+        reportNotifier = rn
+
+        // 2. File watcher — reload state then notify UI panels.
+        val w = FinanceFileWatcher(dir) {
+            state.reload(dir)
+            rn.onReload(dir)
+            fireRefresh()
+        }
+        watcher = w
+        w.start()
+        // Fire once after the initial read so panels render the latest data.
+        rn.onReload(dir)
+        fireRefresh()
+
+        // 3. Hook into quote message bus (application-level)
+        val conn = ApplicationManager.getApplication().messageBus.connect(this)
+        messageBusConnection = conn
+        conn.subscribe(
+            StockerQuoteUpdateNotifier.STOCK_ALL_QUOTE_UPDATE_TOPIC,
+            object : StockerQuoteUpdateNotifier {
+                override fun syncQuotes(quotes: List<StockerQuote>, size: Int) {
+                    if (quotes.isEmpty()) return
+                    detector?.onQuotes(quotes)
+                }
+
+                override fun syncIndices(indices: List<StockerQuote>) {
+                    // not interested in indices for now
+                }
+            }
+        )
+
+        log.info("FinanceBridge started: dir=$dir")
+    }
+
+    /** Force a reload after a settings change. Safe to call anytime. */
+    fun reloadNow() {
+        val dir = resolveFinanceDir()
+        if (java.nio.file.Files.isDirectory(dir)) {
+            state.reload(dir)
+        } else {
+            state.reset()
+        }
+        fireRefresh()
+    }
+
+    override fun dispose() {
+        watcher?.stop()
+        watcher = null
+        messageBusConnection?.disconnect()
+        messageBusConnection = null
+        detector = null
+        notifier?.reset()
+        notifier = null
+        reportNotifier?.reset()
+        reportNotifier = null
+        state.reset()
+        started.set(false)
+    }
+
+    private fun resolveFinanceDir(): Path {
+        val configured = StockerSetting.instance.financeBaseDir
+        val raw = if (configured.isBlank()) defaultDir() else configured
+        return Paths.get(expandTilde(raw))
+    }
+
+    private fun defaultDir(): String {
+        val home = System.getProperty("user.home") ?: "/"
+        return "$home/Claude/finance"
+    }
+
+    private fun expandTilde(p: String): String {
+        if (p.startsWith("~/") || p == "~") {
+            val home = System.getProperty("user.home") ?: return p
+            return home + p.substring(1)
+        }
+        return p
+    }
+
+    companion object {
+        @JvmStatic
+        val instance: FinanceBridgeService
+            get() = ApplicationManager.getApplication().getService(FinanceBridgeService::class.java)
+    }
+}

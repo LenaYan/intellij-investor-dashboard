@@ -10,6 +10,7 @@ import com.intellij.util.messages.MessageBusConnection
 import com.vermouthx.stocker.StockerApp
 import com.vermouthx.stocker.StockerAppManager
 import com.vermouthx.stocker.enums.StockerMarketType
+import com.vermouthx.stocker.finance.panels.FinanceToolWindowPanel
 import com.vermouthx.stocker.listeners.StockerQuoteDeleteListener
 import com.vermouthx.stocker.listeners.StockerQuoteDeleteNotifier.*
 import com.vermouthx.stocker.listeners.StockerQuoteReloadListener
@@ -24,6 +25,7 @@ class StockerToolWindow : ToolWindowFactory {
     private lateinit var allView: StockerSimpleToolWindow
     private lateinit var tabViewMap: Map<StockerMarketType, StockerSimpleToolWindow>
     private lateinit var myApplication: StockerApp
+    private var financePanel: FinanceToolWindowPanel? = null
     private val messageBusConnections = mutableListOf<MessageBusConnection>()
 
     override fun init(toolWindow: ToolWindow) {
@@ -66,6 +68,16 @@ class StockerToolWindow : ToolWindowFactory {
             false
         )
         contentManager.addContent(cryptoContent)
+
+        // Finance tab — only visible when the finance/ bridge is enabled.
+        val setting = com.vermouthx.stocker.settings.StockerSetting.instance
+        if (setting.financeBridgeEnabled) {
+            val finance = FinanceToolWindowPanel()
+            financePanel = finance
+            val financeContent = contentFactory.createContent(finance.component, "Finance", false)
+            contentManager.addContent(financeContent)
+        }
+
         this.subscribeMessage()
         
         // Register cleanup when disposable is disposed
@@ -80,8 +92,14 @@ class StockerToolWindow : ToolWindowFactory {
     private fun cleanup() {
         // Dispose all table views
         allView.tableView.dispose()
-        tabViewMap.values.forEach { it.tableView.dispose() }
-        
+        allView.disposeFinance()
+        tabViewMap.values.forEach {
+            it.tableView.dispose()
+            it.disposeFinance()
+        }
+        financePanel?.dispose()
+        financePanel = null
+
         // Disconnect all message bus connections
         messageBusConnections.forEach { it.disconnect() }
         messageBusConnections.clear()

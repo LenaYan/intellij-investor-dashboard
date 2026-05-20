@@ -21,4 +21,18 @@ class StockerSettingState {
     var stockCostPrices: MutableMap<String, Double> = mutableMapOf()
     var stockHoldings: MutableMap<String, Int> = mutableMapOf()
     var focusedStocks: MutableSet<String> = mutableSetOf()
+
+    // ── Finance Bridge (~/Claude/finance integration) ─────────────────────────
+    /** Master switch. If true *and* financeBaseDir exists, Stocker reads watchlist/portfolio/reports. */
+    var financeBridgeEnabled: Boolean = true
+    /** Absolute path or ~-prefixed. Empty string means default ~/Claude/finance. */
+    var financeBaseDir: String = ""
+    /** Trigger ANOMALY notifications when |Δ%| reaches this threshold. */
+    var anomalyThresholdPct: Double = 5.0
+    /** Stronger anomaly tier (different notification severity). */
+    var anomalyStrongThresholdPct: Double = 7.0
+    /** Fire notifications for ±5/±7%/limit hits on watchlist or portfolio symbols. */
+    var financeNotifyAnomaly: Boolean = true
+    /** Fire notifications when price enters target_zone low or breaks invalidation level. */
+    var financeNotifyTriggers: Boolean = true
 }

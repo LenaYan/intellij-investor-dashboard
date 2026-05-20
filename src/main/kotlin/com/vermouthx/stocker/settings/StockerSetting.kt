@@ -131,6 +131,44 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
             myState.stockHoldings = value
         }
 
+    var financeBridgeEnabled: Boolean
+        get() = myState.financeBridgeEnabled
+        set(value) {
+            myState.financeBridgeEnabled = value
+            log.info("Stocker finance bridge enabled set to $value")
+        }
+
+    var financeBaseDir: String
+        get() = myState.financeBaseDir
+        set(value) {
+            myState.financeBaseDir = value
+            log.info("Stocker finance base dir set to $value")
+        }
+
+    var anomalyThresholdPct: Double
+        get() = myState.anomalyThresholdPct
+        set(value) {
+            myState.anomalyThresholdPct = value
+        }
+
+    var anomalyStrongThresholdPct: Double
+        get() = myState.anomalyStrongThresholdPct
+        set(value) {
+            myState.anomalyStrongThresholdPct = value
+        }
+
+    var financeNotifyAnomaly: Boolean
+        get() = myState.financeNotifyAnomaly
+        set(value) {
+            myState.financeNotifyAnomaly = value
+        }
+
+    var financeNotifyTriggers: Boolean
+        get() = myState.financeNotifyTriggers
+        set(value) {
+            myState.financeNotifyTriggers = value
+        }
+
     val allStockListSize: Int
         get() = aShareList.size + hkStocksList.size + usStocksList.size + cryptoList.size
 

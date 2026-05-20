@@ -17,6 +17,7 @@ import com.vermouthx.stocker.entities.StockerSuggestion;
 import com.vermouthx.stocker.enums.StockerMarketType;
 import com.vermouthx.stocker.enums.StockerSortState;
 import com.vermouthx.stocker.enums.StockerTableColumn;
+import com.vermouthx.stocker.finance.FinanceWatchlistActions;
 import com.vermouthx.stocker.settings.StockerSetting;
 import com.vermouthx.stocker.utils.StockerActionUtil;
 import com.vermouthx.stocker.utils.StockerPinyinUtil;
@@ -65,6 +66,7 @@ public class StockerTableView implements Disposable {
     private final StockerDefaultTableCellRender costRenderer = new CostCellRenderer();
     private final StockerDefaultTableCellRender netProfitRenderer = new NetProfitCellRenderer();
     private final StockerSparklineCellRenderer sparklineRenderer = new StockerSparklineCellRenderer();
+    private final StockerDefaultTableCellRender healthRenderer = new HealthCellRenderer();
 
     // Sorting state
     private StockerTableHeaderRender headerRenderer;
@@ -291,6 +293,7 @@ public class StockerTableView implements Disposable {
     private static final String holdingsColumn = StockerTableColumn.HOLDINGS.name();
     private static final String netProfitColumn = StockerTableColumn.NET_PROFIT.name();
     private static final String sparklineColumn = StockerTableColumn.SPARKLINE.name();
+    private static final String healthColumn = StockerTableColumn.HEALTH.name();
     private static final List<String> allColumnNames;
 
     static {
@@ -326,7 +329,7 @@ public class StockerTableView implements Disposable {
             }
         });
 
-        tbModel.setColumnIdentifiers(new String[]{codeColumn, nameColumn, currentColumn, openingColumn, closeColumn, lowColumn, highColumn, changeColumn, percentColumn, costPriceColumn, holdingsColumn, netProfitColumn, sparklineColumn});
+        tbModel.setColumnIdentifiers(new String[]{codeColumn, nameColumn, currentColumn, openingColumn, closeColumn, lowColumn, highColumn, changeColumn, percentColumn, costPriceColumn, holdingsColumn, netProfitColumn, sparklineColumn, healthColumn});
 
         tbBody.setModel(tbModel);
         tbBody.setAutoCreateColumnsFromModel(false);
@@ -407,6 +410,13 @@ public class StockerTableView implements Disposable {
         focusMenuItem.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
         focusMenuItem.addActionListener(e -> toggleFocusSelectedStock());
 
+        // Add-to-Claude-watchlist menu item (writes ~/Claude/finance/watchlist.json)
+        JMenuItem addWatchlistItem = new JMenuItem(StockerBundle.message("menu.add.to.claude.watchlist"));
+        addWatchlistItem.setOpaque(true);
+        addWatchlistItem.setRolloverEnabled(true);
+        addWatchlistItem.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+        addWatchlistItem.addActionListener(e -> addSelectedToClaudeWatchlist());
+
         // Delete menu item
         JMenuItem deleteMenuItem = new JMenuItem(StockerBundle.message("menu.delete"));
         deleteMenuItem.setOpaque(true);
@@ -424,7 +434,7 @@ public class StockerTableView implements Disposable {
                 JBColor.namedColor("List.selectionForeground", tbBody.getSelectionForeground())
         );
 
-        for (JMenuItem item : new JMenuItem[]{focusMenuItem, deleteMenuItem}) {
+        for (JMenuItem item : new JMenuItem[]{focusMenuItem, addWatchlistItem, deleteMenuItem}) {
             item.setBackground(defaultBackground);
             item.setForeground(defaultForeground);
             item.getModel().addChangeListener(ev -> {
@@ -460,8 +470,40 @@ public class StockerTableView implements Disposable {
         });
         popupMenu.add(focusMenuItem);
         popupMenu.addSeparator();
+        popupMenu.add(addWatchlistItem);
+        popupMenu.addSeparator();
         popupMenu.add(deleteMenuItem);
         return popupMenu;
+    }
+
+    private void addSelectedToClaudeWatchlist() {
+        String code = popupTargetCode;
+        String name = popupTargetName;
+        if (code == null) {
+            int selectedRow = tbBody.getSelectedRow();
+            if (selectedRow < 0) {
+                clearPopupTarget();
+                return;
+            }
+            code = getStringValueAt(selectedRow, 0);
+            name = getStringValueAt(selectedRow, 1);
+        }
+        if (code == null) {
+            clearPopupTarget();
+            return;
+        }
+        // Find current price from row (column 2)
+        int row = tbBody.getSelectedRow();
+        Double refPrice = null;
+        if (row >= 0) {
+            try {
+                Object v = tbModel.getValueAt(row, 2);
+                if (v != null) refPrice = parseDouble(v);
+            } catch (Exception ignored) {
+            }
+        }
+        FinanceWatchlistActions.addToWatchlist(code, name, refPrice);
+        clearPopupTarget();
     }
 
     private void toggleFocusSelectedStock() {
@@ -712,6 +754,13 @@ public class StockerTableView implements Disposable {
             sparkline.setPreferredWidth(120);
             sparkline.setMinWidth(80);
         }
+        TableColumn health = getColumnIfPresent(healthColumn);
+        if (health != null) {
+            health.setCellRenderer(healthRenderer);
+            health.setPreferredWidth(50);
+            health.setMinWidth(36);
+            health.setMaxWidth(72);
+        }
     }
 
     private TableColumn getColumnIfPresent(String identifier) {
@@ -865,8 +914,8 @@ public class StockerTableView implements Disposable {
             return;
         }
 
-        // Skip sorting for non-sortable columns (sparkline)
-        if (columnName.equals(sparklineColumn)) {
+        // Skip sorting for non-sortable columns (sparkline, health)
+        if (columnName.equals(sparklineColumn) || columnName.equals(healthColumn)) {
             return;
         }
 
@@ -1146,6 +1195,68 @@ public class StockerTableView implements Disposable {
                 setForeground(downColor);
             } else {
                 setForeground(zeroColor);
+            }
+            return component;
+        }
+    }
+
+    /**
+     * Renderer for the Health column. The value is expected to be a single-character glyph
+     * supplied by {@link com.vermouthx.stocker.listeners.StockerQuoteUpdateListener} based on
+     * {@link com.vermouthx.stocker.finance.FinanceBridgeService}. Color reflects the status,
+     * not the up/down direction.
+     *   ● green   – position thesis is intact (drift_score 0 or watchlist trigger not hit)
+     *   ● yellow  – near a trigger, or thesis drift 1–2
+     *   ● red     – triggered (stop loss / invalidation) or thesis drift ≥ 3
+     *   ● gray    – no finance/ report available for this symbol
+     */
+    private class HealthCellRenderer extends StockerDefaultTableCellRender {
+        private final Color green = new JBColor(new Color(0x2E7D32), new Color(0x66BB6A));
+        private final Color yellow = new JBColor(new Color(0xC78A00), new Color(0xFFCA28));
+        private final Color red = new JBColor(new Color(0xC62828), new Color(0xEF5350));
+        private final Color gray = JBColor.GRAY;
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            setHorizontalAlignment(DefaultTableCellRenderer.CENTER);
+            if (isSelected) {
+                return component;
+            }
+            if (value == null) {
+                setForeground(gray);
+                setText("●");
+                setToolTipText(null);
+                return component;
+            }
+            String s = value.toString();
+            // value format is "<glyph>|<tooltip>" so we can carry status text without an extra column
+            String glyph = s;
+            String tip = null;
+            int sep = s.indexOf('|');
+            if (sep >= 0) {
+                glyph = s.substring(0, sep);
+                tip = s.substring(sep + 1);
+            }
+            setText(glyph);
+            setToolTipText(tip);
+            switch (glyph) {
+                case "G":
+                    setForeground(green);
+                    setText("●");
+                    break;
+                case "Y":
+                    setForeground(yellow);
+                    setText("●");
+                    break;
+                case "R":
+                    setForeground(red);
+                    setText("●");
+                    break;
+                default:
+                    setForeground(gray);
+                    setText("●");
+                    break;
             }
             return component;
         }

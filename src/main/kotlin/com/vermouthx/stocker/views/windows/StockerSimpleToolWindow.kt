@@ -9,10 +9,16 @@ import com.vermouthx.stocker.actions.StockerSettingAction
 import com.vermouthx.stocker.actions.StockerStockManageAction
 import com.vermouthx.stocker.actions.StockerStockSearchAction
 import com.vermouthx.stocker.actions.StockerStopAction
+import com.vermouthx.stocker.finance.panels.FinanceMainThreadHeader
 import com.vermouthx.stocker.views.StockerTableView
 
 class StockerSimpleToolWindow : SimpleToolWindowPanel(true) {
     var tableView: StockerTableView = StockerTableView()
+    private val mainThreadHeader = FinanceMainThreadHeader()
+
+    fun disposeFinance() {
+        mainThreadHeader.dispose()
+    }
 
     init {
         val actionManager = ActionManager.getInstance()
@@ -40,6 +46,13 @@ class StockerSimpleToolWindow : SimpleToolWindowPanel(true) {
         }
         
         this.toolbar = toolbarPanel
-        setContent(tableView.component)
+
+        // Wrap table view: main-thread header (auto-hides when finance/ has no data) on top,
+        // the existing table component fills the rest.
+        val centerPane = javax.swing.JPanel(java.awt.BorderLayout()).apply {
+            add(mainThreadHeader, java.awt.BorderLayout.NORTH)
+            add(tableView.component, java.awt.BorderLayout.CENTER)
+        }
+        setContent(centerPane)
     }
 }

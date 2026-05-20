@@ -1,12 +1,17 @@
 package com.vermouthx.stocker.listeners;
 
 import com.vermouthx.stocker.entities.StockerQuote;
+import com.vermouthx.stocker.finance.FinanceBridgeService;
+import com.vermouthx.stocker.finance.FinanceEventCalendar;
+import com.vermouthx.stocker.finance.FinanceState;
+import com.vermouthx.stocker.finance.WatchlistEntry;
 import com.vermouthx.stocker.settings.StockerSetting;
 import com.vermouthx.stocker.utils.StockerTableModelUtil;
 import com.vermouthx.stocker.views.StockerTableView;
 
 import javax.swing.table.DefaultTableModel;
 import java.util.List;
+import java.util.Set;
 
 public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
     private final StockerTableView myTableView;
@@ -26,6 +31,86 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
         return String.format("%.3f", (quote.getCurrent() - costPrice) * holdings);
     }
 
+    /**
+     * Prefix the display name with calendar-event emojis (📊 earnings, 🔓 unlock) when
+     * the symbol has any upcoming or recent events recorded in earnings-tracker.md /
+     * position-risk-monitor.md.
+     *
+     * Returns the original name unchanged when finance/ has nothing for this code.
+     */
+    private static String prefixNameWithEvents(String baseName, String code) {
+        try {
+            Set<FinanceEventCalendar.EventKind> events =
+                FinanceBridgeService.getInstance().snapshot().getEventsBySymbol()
+                    .getOrDefault(com.vermouthx.stocker.finance.FinanceSymbol.normalize(code),
+                                  java.util.Collections.emptySet());
+            if (events.isEmpty()) return baseName;
+            StringBuilder sb = new StringBuilder();
+            if (events.contains(FinanceEventCalendar.EventKind.EARNINGS)) sb.append("📊");
+            if (events.contains(FinanceEventCalendar.EventKind.UNLOCK))   sb.append("🔓");
+            if (sb.length() == 0) return baseName;
+            sb.append(' ').append(baseName);
+            return sb.toString();
+        } catch (Throwable t) {
+            return baseName;
+        }
+    }
+
+    /**
+     * Encode the finance/ health badge as "<glyph>|<tooltip>" so the cell renderer can show
+     * the dot and the explanation in a tooltip without needing a second column.
+     * Returns null when the symbol is unknown to finance/ — the renderer will paint a gray dot.
+     */
+    private static String formatHealthBadge(String code) {
+        try {
+            FinanceBridgeService bridge = FinanceBridgeService.getInstance();
+            FinanceState.Health h = bridge.healthOf(code);
+            WatchlistEntry entry = bridge.watchlistEntry(code);
+
+            StringBuilder tip = new StringBuilder();
+            if (entry != null) {
+                if (entry.getName() != null) {
+                    tip.append(entry.getName()).append(" (").append(entry.getSymbol()).append(")\n");
+                }
+                if (entry.getSector() != null) {
+                    tip.append("行业: ").append(entry.getSector()).append("\n");
+                }
+                if (entry.getTargetZoneLow() != null && entry.getTargetZoneHigh() != null) {
+                    tip.append("target: ¥").append(entry.getTargetZoneLow())
+                       .append(" – ¥").append(entry.getTargetZoneHigh()).append("\n");
+                }
+                if (entry.getTrigger() != null) {
+                    tip.append("trigger: ").append(entry.getTrigger()).append("\n");
+                }
+            }
+            String glyph;
+            switch (h) {
+                case GREEN:
+                    glyph = "G";
+                    if (tip.length() == 0) tip.append("持仓 thesis 良好");
+                    break;
+                case YELLOW:
+                    glyph = "Y";
+                    if (tip.length() == 0) tip.append("接近触发 / thesis 偏离 1-2");
+                    else tip.insert(0, "状态: 关注（接近触发或 thesis 偏离 1-2）\n");
+                    break;
+                case RED:
+                    glyph = "R";
+                    if (tip.length() == 0) tip.append("触发止损 / thesis 偏离 ≥3");
+                    else tip.insert(0, "状态: 警戒（已触发或 thesis 偏离 ≥3）\n");
+                    break;
+                default:
+                    if (entry == null) return null;
+                    glyph = "-";
+                    if (tip.length() == 0) tip.append("watchlist 已收录，暂无 position-risk-monitor 报告");
+                    break;
+            }
+            return glyph + "|" + tip.toString().trim();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     public StockerQuoteUpdateListener(StockerTableView myTableView) {
         this.myTableView = myTableView;
     }
@@ -37,7 +122,9 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
         
         quotes.forEach(quote -> {
             synchronized (myTableView.getTableModel()) {
-                String displayName = setting.getDisplayName(quote.getCode(), quote.getName());
+                String displayName = prefixNameWithEvents(
+                    setting.getDisplayName(quote.getCode(), quote.getName()),
+                    quote.getCode());
                 int rowIndex = StockerTableModelUtil.existAt(tableModel, quote.getCode());
                 if (rowIndex != -1) {
                     // Update existing row - check each column
@@ -102,24 +189,39 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
                         tableModel.setValueAt(netProfitVal, rowIndex, 11);
                         tableModel.fireTableCellUpdated(rowIndex, 11);
                     }
+                    // Column 13: Health badge (column 12 is sparkline data, set elsewhere)
+                    if (tableModel.getColumnCount() > 13) {
+                        String healthVal = formatHealthBadge(quote.getCode());
+                        Object existing = tableModel.getValueAt(rowIndex, 13);
+                        if (healthVal == null) {
+                            if (existing != null) {
+                                tableModel.setValueAt(null, rowIndex, 13);
+                                tableModel.fireTableCellUpdated(rowIndex, 13);
+                            }
+                        } else if (!healthVal.equals(existing)) {
+                            tableModel.setValueAt(healthVal, rowIndex, 13);
+                            tableModel.fireTableCellUpdated(rowIndex, 13);
+                        }
+                    }
                 } else {
                     if (quotes.size() <= size) {
                         Double costPrice = setting.getCostPrice(quote.getCode());
                         Integer holdings = setting.getHoldings(quote.getCode());
                         tableModel.addRow(new Object[]{
-                            quote.getCode(), 
-                            displayName, 
-                            quote.getCurrent(), 
-                            quote.getOpening(), 
-                            quote.getClose(), 
-                            quote.getLow(), 
-                            quote.getHigh(), 
-                            quote.getChange(), 
+                            quote.getCode(),
+                            displayName,
+                            quote.getCurrent(),
+                            quote.getOpening(),
+                            quote.getClose(),
+                            quote.getLow(),
+                            quote.getHigh(),
+                            quote.getChange(),
                             quote.getPercentage() + "%",
                             formatCostPrice(costPrice),
                             formatHoldings(holdings),
                             formatNetProfit(quote, costPrice, holdings),
-                            null // sparkline data populated by intraday fetch
+                            null, // sparkline data populated by intraday fetch
+                            formatHealthBadge(quote.getCode()) // finance/ bridge health
                         });
                         // Clear sort state when new rows are added
                         myTableView.clearSortState();
