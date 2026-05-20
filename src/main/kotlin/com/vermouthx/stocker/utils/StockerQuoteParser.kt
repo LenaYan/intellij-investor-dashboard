@@ -31,7 +31,13 @@ object StockerQuoteParser {
         }.map { text -> text.split(",") }.map { textArray ->
             when (marketType) {
                 StockerMarketType.AShare -> {
-                    val code = textArray[0].uppercase()
+                    val rawCode = textArray[0]
+                    // Strip sh/sz prefix added for API request
+                    val code = if (rawCode.length > 2 && (rawCode.startsWith("sh") || rawCode.startsWith("sz"))) {
+                        rawCode.substring(2).uppercase()
+                    } else {
+                        rawCode.uppercase()
+                    }
                     val name = textArray[1]
                     val opening = textArray[2].toDouble()
                     val close = textArray[3].toDouble()
@@ -138,7 +144,11 @@ object StockerQuoteParser {
     private fun parseTencentQuoteResponse(marketType: StockerMarketType, responseText: String): List<StockerQuote> {
         return responseText.split("\n").asSequence().filter { text -> text.isNotEmpty() }.map { text ->
             val code = when (marketType) {
-                StockerMarketType.AShare -> text.subSequence(2, text.indexOfFirst { c -> c == '=' })
+                StockerMarketType.AShare -> {
+                    // Response: v_sh600522="..." or v_sz002051="..." — strip "v_sh" or "v_sz" (4 chars)
+                    val raw = text.subSequence(2, text.indexOfFirst { c -> c == '=' }).toString()
+                    if (raw.startsWith("sh") || raw.startsWith("sz")) raw.substring(2) else raw
+                }
                 StockerMarketType.HKStocks, StockerMarketType.USStocks -> text.subSequence(4,
                     text.indexOfFirst { c -> c == '=' })
 
