@@ -103,7 +103,7 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
                         tableModel.fireTableCellUpdated(rowIndex, 11);
                     }
                 } else {
-                    if (quotes.size() == size) {
+                    if (quotes.size() <= size) {
                         Double costPrice = setting.getCostPrice(quote.getCode());
                         Integer holdings = setting.getHoldings(quote.getCode());
                         tableModel.addRow(new Object[]{
