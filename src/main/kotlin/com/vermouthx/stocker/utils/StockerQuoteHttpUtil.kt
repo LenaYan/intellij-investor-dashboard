@@ -166,12 +166,16 @@ object StockerQuoteHttpUtil {
 
         if (prices.isEmpty()) return null
 
-        // Extract yesterday's close from qt field: "qt":{"shCODE":["...","...","close",...]}
+        // Extract yesterday's close from qt field: "qt":{"v_ff_shCODE":[],"shCODE":["1","name","code","...","close",...]}
         var close = prices.first()
         val qtStart = json.indexOf("\"qt\":")
         if (qtStart >= 0) {
-            val qtArrayStart = json.indexOf("[", qtStart)
-            if (qtArrayStart >= 0) {
+            // Find the stock's qt array by looking for the code in a key followed by ":["
+            // The key format varies: "sh600522", "hk00700", "usAAPL", etc.
+            val qtKeyPattern = "$code\":["
+            val stockQtPos = json.indexOf(qtKeyPattern, qtStart)
+            if (stockQtPos >= 0) {
+                val qtArrayStart = stockQtPos + qtKeyPattern.length - 1  // position of '['
                 val qtArrayEnd = json.indexOf("]", qtArrayStart)
                 if (qtArrayEnd >= 0) {
                     val qtContent = json.substring(qtArrayStart + 1, qtArrayEnd)
