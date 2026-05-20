@@ -20,4 +20,5 @@ class StockerSettingState {
     var customStockNames: MutableMap<String, String> = mutableMapOf()
     var stockCostPrices: MutableMap<String, Double> = mutableMapOf()
     var stockHoldings: MutableMap<String, Int> = mutableMapOf()
+    var focusedStocks: MutableSet<String> = mutableSetOf()
 }

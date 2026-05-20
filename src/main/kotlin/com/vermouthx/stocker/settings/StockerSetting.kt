@@ -177,6 +177,22 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
         log.info("Holdings removed for $code")
     }
 
+    fun isStockFocused(code: String): Boolean {
+        return myState.focusedStocks.contains(code)
+    }
+
+    fun toggleFocusStock(code: String): Boolean {
+        val focused = if (myState.focusedStocks.contains(code)) {
+            myState.focusedStocks.remove(code)
+            false
+        } else {
+            myState.focusedStocks.add(code)
+            true
+        }
+        log.info("Stock focus toggled for $code: $focused")
+        return focused
+    }
+
     fun getDisplayName(code: String, originalName: String): String {
         // Priority: Custom name > Pinyin mode > Original name
         customStockNames[code]?.let { return it }

@@ -6,6 +6,7 @@ import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.table.JBTable;
+import com.vermouthx.stocker.StockerBundle;
 import com.vermouthx.stocker.components.StockerDefaultTableCellRender;
 import com.vermouthx.stocker.components.StockerSparklineCellRenderer;
 import com.vermouthx.stocker.components.StockerTableHeaderRender;
@@ -398,10 +399,20 @@ public class StockerTableView implements Disposable {
 
     private JPopupMenu createRowPopupMenu() {
         JPopupMenu popupMenu = new JPopupMenu();
-        JMenuItem deleteMenuItem = new JMenuItem("Delete");
+
+        // Focus toggle menu item
+        JMenuItem focusMenuItem = new JMenuItem();
+        focusMenuItem.setOpaque(true);
+        focusMenuItem.setRolloverEnabled(true);
+        focusMenuItem.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+        focusMenuItem.addActionListener(e -> toggleFocusSelectedStock());
+
+        // Delete menu item
+        JMenuItem deleteMenuItem = new JMenuItem(StockerBundle.message("menu.delete"));
         deleteMenuItem.setOpaque(true);
         deleteMenuItem.setRolloverEnabled(true);
         deleteMenuItem.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+
         Color defaultBackground = JBColor.namedColor("MenuItem.background", UIManager.getColor("MenuItem.background"));
         Color defaultForeground = JBColor.namedColor("MenuItem.foreground", UIManager.getColor("MenuItem.foreground"));
         Color hoverBackground = JBColor.namedColor(
@@ -412,18 +423,29 @@ public class StockerTableView implements Disposable {
                 "MenuItem.selectionForeground",
                 JBColor.namedColor("List.selectionForeground", tbBody.getSelectionForeground())
         );
-        deleteMenuItem.setBackground(defaultBackground);
-        deleteMenuItem.setForeground(defaultForeground);
-        deleteMenuItem.getModel().addChangeListener(e -> {
-            ButtonModel model = deleteMenuItem.getModel();
-            boolean hovering = model.isArmed() || model.isRollover();
-            deleteMenuItem.setBackground(hovering ? hoverBackground : defaultBackground);
-            deleteMenuItem.setForeground(hovering ? hoverForeground : defaultForeground);
-        });
+
+        for (JMenuItem item : new JMenuItem[]{focusMenuItem, deleteMenuItem}) {
+            item.setBackground(defaultBackground);
+            item.setForeground(defaultForeground);
+            item.getModel().addChangeListener(ev -> {
+                ButtonModel model = item.getModel();
+                boolean hovering = model.isArmed() || model.isRollover();
+                item.setBackground(hovering ? hoverBackground : defaultBackground);
+                item.setForeground(hovering ? hoverForeground : defaultForeground);
+            });
+        }
+
         deleteMenuItem.addActionListener(e -> deleteSelectedStock());
         popupMenu.addPopupMenuListener(new PopupMenuListener() {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+                // Update focus menu item text based on current state
+                String code = popupTargetCode;
+                if (code != null && StockerSetting.Companion.getInstance().isStockFocused(code)) {
+                    focusMenuItem.setText(StockerBundle.message("menu.unfocus"));
+                } else {
+                    focusMenuItem.setText(StockerBundle.message("menu.focus"));
+                }
             }
 
             @Override
@@ -436,8 +458,25 @@ public class StockerTableView implements Disposable {
                 clearPopupStateLater(popupMenu);
             }
         });
+        popupMenu.add(focusMenuItem);
+        popupMenu.addSeparator();
         popupMenu.add(deleteMenuItem);
         return popupMenu;
+    }
+
+    private void toggleFocusSelectedStock() {
+        String code = popupTargetCode;
+        if (code == null) {
+            int selectedRow = tbBody.getSelectedRow();
+            if (selectedRow >= 0) {
+                code = getStringValueAt(selectedRow, 0);
+            }
+        }
+        if (code != null) {
+            StockerSetting.Companion.getInstance().toggleFocusStock(code);
+            tbBody.repaint();
+        }
+        clearPopupTarget();
     }
 
     private void deleteSelectedStock() {
