@@ -36,6 +36,7 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
     private var showCostPrice: Boolean = setting.isTableColumnVisible(StockerTableColumn.COST_PRICE)
     private var showHoldings: Boolean = setting.isTableColumnVisible(StockerTableColumn.HOLDINGS)
     private var showNetProfit: Boolean = setting.isTableColumnVisible(StockerTableColumn.NET_PROFIT)
+    private var showSparkline: Boolean = setting.isTableColumnVisible(StockerTableColumn.SPARKLINE)
 
     private var symbolCheckBox: JCheckBox? = null
     private var nameCheckBox: JCheckBox? = null
@@ -238,6 +239,13 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                             .component
                     }
                     row {
+                        checkBox(StockerTableColumn.SPARKLINE.title)
+                            .bindSelected(::showSparkline.toMutableProperty())
+                            .applyToComponent {
+                                addItemListener { handleColumnToggle(this) }
+                            }
+                    }
+                    row {
                         columnWarningLabel = label(StockerBundle.message("settings.table.columns.warning"))
                             .applyToComponent {
                                 foreground = JBColor.RED
@@ -300,6 +308,7 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 showCostPrice = setting.isTableColumnVisible(StockerTableColumn.COST_PRICE)
                 showHoldings = setting.isTableColumnVisible(StockerTableColumn.HOLDINGS)
                 showNetProfit = setting.isTableColumnVisible(StockerTableColumn.NET_PROFIT)
+                showSparkline = setting.isTableColumnVisible(StockerTableColumn.SPARKLINE)
                 columnWarningLabel?.isVisible = false
             }
         }
@@ -319,6 +328,7 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
         if (showCostPrice) visibleColumns.add(StockerTableColumn.COST_PRICE.name)
         if (showHoldings) visibleColumns.add(StockerTableColumn.HOLDINGS.name)
         if (showNetProfit) visibleColumns.add(StockerTableColumn.NET_PROFIT.name)
+        if (showSparkline) visibleColumns.add(StockerTableColumn.SPARKLINE.name)
         return visibleColumns
     }
 
