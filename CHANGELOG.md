@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.21.1
+
+### 🐛 Bug Fixes / 错误修复
+
+- Fixed Settings → Visible columns panel missing the Health and Trigger Distance checkboxes. The settings UI was hardcoded with a fixed column list that fell behind the enum, so users could not toggle these two columns from the UI even though the columns existed. Both checkboxes are now registered alongside the others / 修复 设置 → 可见列 面板缺失"健康度"和"距阈值"复选框的问题。设置 UI 用的是硬编码列表而非 enum 遍历，导致这两列即使在数据层已存在，用户也无法从设置里勾选；现已补齐两个复选框
+
 ## 1.21.0
 
 ### ✨ New Features / 新功能

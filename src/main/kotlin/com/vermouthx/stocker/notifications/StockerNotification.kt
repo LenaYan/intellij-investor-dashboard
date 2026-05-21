@@ -45,44 +45,34 @@ object StockerNotification {
         return if (isChinese()) """
             <div style="${Styles.CONTAINER}">
                 <p style="${Styles.PARAGRAPH}">🎉 <strong>欢迎使用 Stocker v${v}！本次更新内容：</strong></p>
-                <h4 style="${Styles.HEADING}">✨ v${v} 新功能</h4>
+                <h4 style="${Styles.HEADING}">🐛 v${v} 错误修复</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>新增"距阈值"列</strong>
-                        <ul style="${Styles.SUB_LIST}">
-                            <li>实时显示当前价距 finance/ watchlist 与 entry-timing trigger / invalidation 价位的距离</li>
-                            <li>进入触发区 ±1.5% → 琥珀色背景；跌破失效价 → 红色背景</li>
-                        </ul>
-                    </li>
+                    <li style="${Styles.LIST_ITEM}">🐛 修复 <strong>设置 → 可见列</strong> 面板缺失"健康度"和"距阈值"复选框，导致 1.21.0 用户无法从 UI 启用新列的问题</li>
                 </ul>
-                <h4 style="${Styles.HEADING}">🔧 v${v} 行为变更</h4>
+                <h4 style="${Styles.HEADING}">✨ v1.21 新功能回顾</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">🔕 watchlist trigger / invalidation 命中、entry-timing 买点命中<strong>不再弹气泡通知</strong>，改为在"距阈值"列内联展示</li>
-                    <li style="${Styles.LIST_ITEM}">🔔 市场异动（±5% / ±7%）和 A 股涨停跌停通知保持不变</li>
+                    <li style="${Styles.LIST_ITEM}">✨ <strong>"距阈值"列</strong>：实时显示当前价距 finance/ watchlist 与 entry-timing trigger / invalidation 价位的距离；进入触发区 ±1.5% → 琥珀色背景；跌破失效价 → 红色背景</li>
+                    <li style="${Styles.LIST_ITEM}">🔕 watchlist trigger / invalidation 命中、entry-timing 买点命中不再弹气泡通知（市场异动 ±5% / ±7% 和涨跌停通知保持不变）</li>
                 </ul>
                 <div style="${Styles.INFO_BOX}">
-                    <p style="margin: 0; font-size: 12px;">💡 <strong>说明：</strong>在 <strong>设置 → 工具 → Stocker</strong> 的可见列中勾选"距阈值"即可启用。关闭 finance trigger / entry-timing 提醒会让该列保留信息但不再着色。</p>
+                    <p style="margin: 0; font-size: 12px;">💡 <strong>说明：</strong>升级后到 <strong>设置 → 工具 → Stocker</strong> 的可见列里勾选"距阈值"（及"健康度"）即可启用。</p>
                 </div>
                 <p style="${Styles.SMALL_TEXT}">💖 如果您觉得这个插件有帮助，请考虑点击下方的 <strong>Donate</strong> 按钮以支持开发。谢谢！📈</p>
             </div>
         """.trimIndent() else """
             <div style="${Styles.CONTAINER}">
                 <p style="${Styles.PARAGRAPH}">🎉 <strong>Welcome to Stocker v${v}! Here's what's new in this release:</strong></p>
-                <h4 style="${Styles.HEADING}">✨ New in v${v}</h4>
+                <h4 style="${Styles.HEADING}">🐛 Bug Fixes in v${v}</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>Trigger Distance column</strong>
-                        <ul style="${Styles.SUB_LIST}">
-                            <li>Shows live distance between current price and finance/ watchlist or entry-timing trigger / invalidation prices</li>
-                            <li>Amber background when entering the trigger ±1.5% zone; red background when invalidation is breached</li>
-                        </ul>
-                    </li>
+                    <li style="${Styles.LIST_ITEM}">🐛 Fixed <strong>Settings → Visible columns</strong> panel missing the Health and Trigger Distance checkboxes, so 1.21.0 users could not enable the new columns from the UI</li>
                 </ul>
-                <h4 style="${Styles.HEADING}">🔧 Behavior Change in v${v}</h4>
+                <h4 style="${Styles.HEADING}">✨ v1.21 Feature Recap</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">🔕 Watchlist trigger / invalidation hits and entry-timing buy-point hits <strong>no longer surface as balloon popups</strong> — they appear inline in the new Trigger Distance column</li>
-                    <li style="${Styles.LIST_ITEM}">🔔 Market anomaly (±5% / ±7%) and A-share limit-up / limit-down notifications still fire as before</li>
+                    <li style="${Styles.LIST_ITEM}">✨ <strong>Trigger Distance column</strong>: live distance between current price and finance/ watchlist or entry-timing trigger / invalidation prices; amber bg inside trigger ±1.5%; red bg when invalidation is breached</li>
+                    <li style="${Styles.LIST_ITEM}">🔕 Watchlist trigger / invalidation and entry-timing buy-point hits no longer surface as popups (market anomaly ±5% / ±7% and A-share limit-up / limit-down notifications still fire as before)</li>
                 </ul>
                 <div style="${Styles.INFO_BOX}">
-                    <p style="margin: 0; font-size: 12px;">💡 <strong>Tip:</strong> Enable the column under <strong>Settings → Tools → Stocker</strong> → Visible Columns → "Trigger Dist." Disabling the finance trigger / entry-timing notification toggles keeps the column text but turns off the urgent colors.</p>
+                    <p style="margin: 0; font-size: 12px;">💡 <strong>Tip:</strong> After upgrade, enable the column under <strong>Settings → Tools → Stocker</strong> → Visible columns → "Trigger Dist." (and "Health").</p>
                 </div>
                 <p style="${Styles.SMALL_TEXT}">💖 If you find this plugin helpful, please consider clicking the <strong>Donate</strong> button below to support its development. Thank you! 📈</p>
             </div>

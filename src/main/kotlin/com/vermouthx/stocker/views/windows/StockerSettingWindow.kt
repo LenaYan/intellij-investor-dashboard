@@ -37,6 +37,8 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
     private var showHoldings: Boolean = setting.isTableColumnVisible(StockerTableColumn.HOLDINGS)
     private var showNetProfit: Boolean = setting.isTableColumnVisible(StockerTableColumn.NET_PROFIT)
     private var showSparkline: Boolean = setting.isTableColumnVisible(StockerTableColumn.SPARKLINE)
+    private var showHealth: Boolean = setting.isTableColumnVisible(StockerTableColumn.HEALTH)
+    private var showDistance: Boolean = setting.isTableColumnVisible(StockerTableColumn.DISTANCE)
 
     // Finance bridge settings (mirrored on apply)
     private var financeBridgeEnabled: Boolean = setting.financeBridgeEnabled
@@ -258,6 +260,20 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                             }
                     }
                     row {
+                        checkBox(StockerTableColumn.HEALTH.title)
+                            .bindSelected(::showHealth.toMutableProperty())
+                            .applyToComponent {
+                                addItemListener { handleColumnToggle(this) }
+                            }
+                    }
+                    row {
+                        checkBox(StockerTableColumn.DISTANCE.title)
+                            .bindSelected(::showDistance.toMutableProperty())
+                            .applyToComponent {
+                                addItemListener { handleColumnToggle(this) }
+                            }
+                    }
+                    row {
                         columnWarningLabel = label(StockerBundle.message("settings.table.columns.warning"))
                             .applyToComponent {
                                 foreground = JBColor.RED
@@ -412,6 +428,8 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 showHoldings = setting.isTableColumnVisible(StockerTableColumn.HOLDINGS)
                 showNetProfit = setting.isTableColumnVisible(StockerTableColumn.NET_PROFIT)
                 showSparkline = setting.isTableColumnVisible(StockerTableColumn.SPARKLINE)
+                showHealth = setting.isTableColumnVisible(StockerTableColumn.HEALTH)
+                showDistance = setting.isTableColumnVisible(StockerTableColumn.DISTANCE)
                 financeBridgeEnabled = setting.financeBridgeEnabled
                 financeBaseDir = setting.financeBaseDir
                 anomalyThresholdPct = setting.anomalyThresholdPct
@@ -442,6 +460,8 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
         if (showHoldings) visibleColumns.add(StockerTableColumn.HOLDINGS.name)
         if (showNetProfit) visibleColumns.add(StockerTableColumn.NET_PROFIT.name)
         if (showSparkline) visibleColumns.add(StockerTableColumn.SPARKLINE.name)
+        if (showHealth) visibleColumns.add(StockerTableColumn.HEALTH.name)
+        if (showDistance) visibleColumns.add(StockerTableColumn.DISTANCE.name)
         return visibleColumns
     }
 
