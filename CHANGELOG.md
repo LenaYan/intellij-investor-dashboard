@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.24.0
+
+### ✨ New Features / 新功能
+
+- **Multi-source ScenarioPanel** — the Thread Tracker tab's state-machine panel now consumes scenario trees from up to four agent sources (v2.3 schema): `market-research` primary tree, `thread-tracker` per-active-thread trees, `theme-incubator` candidate themes (synthetic 2-branch A 点火 / B 证伪), and `position-risk-monitor` per-position scenarios (synthetic 3-branch A 持有 / B 减半 / C 清仓). When more than one tree is available, a dropdown selector at the top of the panel lets the user switch between them. Labels are emoji-prefixed: active threads have no prefix, incubator candidates use 🔥, positions use 💼 / 主线追踪标签的状态机面板现在从最多 4 个 agent 来源消费分支树（v2.3 schema）：market-research 主树、thread-tracker 每条活跃主线、theme-incubator 候选主题（synthetic 2 分支 A 点火 / B 证伪）、position-risk-monitor 持仓预案（synthetic 3 分支 A 持有 / B 减半 / C 清仓）。≥2 条主线时面板顶部出现下拉切换器。emoji 前缀区分：活跃主线无前缀、候选主题 🔥、持仓 💼
+
+- **Structured entry-timing triggers** (B3) — DISTANCE column now consumes the v2.3 `recommendations[].triggers_struct` / `invalidations_struct` fields when present, replacing the previous regex-from-free-text extraction. Range-based pullback triggers (e.g. "回踩 67-69") are now correctly checked as `cur ∈ [low × 0.985, high × 1.015]` instead of the old single-point ±1.5% which missed the upper half of wider zones. Free-text fallback preserved for pre-v2.3 reports / DISTANCE 列现在优先消费 v2.3 `triggers_struct` / `invalidations_struct` 结构化字段，替代之前的正则抽数字。区间式 pullback 触发（如"回踩 67-69"）现在正确检查 `cur ∈ [low × 0.985, high × 1.015]`，而非旧逻辑只能锚单点 ±1.5%（宽度 >3% 的区间上半部分会漏判）。pre-v2.3 报告通过正则保留兜底
+
+### 🔧 Infrastructure
+
+- Flip-notification state in ScenarioPanel is now keyed by the selected tree label so switching threads in the dropdown does not fire a spurious branch-flip balloon for the newly-selected thread / ScenarioPanel 的分支切换通知现按选中的 tree label 分别记账，切换下拉选项不会为新选中的主线误触发分支切换通知
+
 ## 1.23.0
 
 ### ✨ New Features / 新功能

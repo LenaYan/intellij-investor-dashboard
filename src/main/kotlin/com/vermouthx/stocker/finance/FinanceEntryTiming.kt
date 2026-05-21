@@ -25,6 +25,31 @@ import java.time.LocalDate
  *       triggers:        [ "...", "..." ]
  *       invalidations:   [ "...", "..." ]
  */
+/**
+ * Structured trigger entry (v2.3 schema). Each entry is one of four shapes:
+ *   - pullback : price entering [low, high] zone fires the trigger
+ *   - breakout : price crossing above value fires the trigger
+ *   - below    : price falling below value (used in invalidations_struct)
+ *   - condition: non-price condition (MACD / event / etc.) — informational only
+ */
+data class EntryTimingStructTrigger(
+    val type: String,                   // pullback | breakout | below | condition
+    val value: Double?,                 // for breakout / below
+    val low: Double?,                   // for pullback (low edge)
+    val high: Double?,                  // for pullback (high edge)
+    val action: String?,                // 接 1 成 / 追 1/2 / 清仓 / ...
+    val positionPct: Int?,              // suggested position size for this rung
+    val description: String?,           // for condition type (free text)
+) {
+    /** Primary anchor price for distance display. Null for `condition` type. */
+    val anchorPrice: Double?
+        get() = when (type) {
+            "pullback" -> low                 // closer-to-current edge of the zone
+            "breakout", "below" -> value
+            else -> null
+        }
+}
+
 data class EntryTimingRecommendation(
     val symbol: String,
     val normalizedKey: String,
@@ -39,14 +64,42 @@ data class EntryTimingRecommendation(
     val threadPhase: String?,
     val firstPositionPct: Int?,
     val addSchedule: String?,
-    val triggers: List<String>,
-    val invalidations: List<String>,
+    val triggers: List<String>,                                 // legacy free-text
+    val invalidations: List<String>,                            // legacy free-text
+    val triggersStruct: List<EntryTimingStructTrigger>,         // v2.3 — structured
+    val invalidationsStruct: List<EntryTimingStructTrigger>,    // v2.3 — structured
 ) {
-    /** First numeric value mentioned in any trigger line — used as a real-time crossing anchor. */
-    val triggerPrice: Double? by lazy { firstNumeric(triggers) }
+    /**
+     * First anchor price from `triggers_struct` (pullback.low or breakout.value).
+     * Falls back to first-number regex extraction on the free-text `triggers[]` list
+     * for backward compatibility with pre-v2.3 reports.
+     */
+    val triggerPrice: Double? by lazy {
+        triggersStruct.firstNotNullOfOrNull { it.anchorPrice?.takeIf { p -> p > 0.0 } }
+            ?: firstNumeric(triggers)
+    }
 
-    /** First numeric value mentioned in any invalidation line — used as the stop-loss anchor. */
-    val invalidationPrice: Double? by lazy { firstNumeric(invalidations) }
+    /**
+     * First `below.value` from `invalidations_struct`, falling back to free-text regex.
+     */
+    val invalidationPrice: Double? by lazy {
+        invalidationsStruct.asSequence()
+            .filter { it.type == "below" }
+            .firstNotNullOfOrNull { it.value?.takeIf { p -> p > 0.0 } }
+            ?: firstNumeric(invalidations)
+    }
+
+    /**
+     * Primary pullback zone (low, high) if present in triggers_struct — null otherwise.
+     * Used by DISTANCE column to highlight range-based triggers correctly (the
+     * legacy single-anchor logic only checks ±1.5% of one point).
+     */
+    val pullbackZone: Pair<Double, Double>? by lazy {
+        val pb = triggersStruct.firstOrNull { it.type == "pullback" } ?: return@lazy null
+        val lo = pb.low ?: return@lazy null
+        val hi = pb.high ?: return@lazy null
+        if (lo > 0 && hi > 0 && lo <= hi) lo to hi else null
+    }
 
     private fun firstNumeric(items: List<String>): Double? {
         for (s in items) {
@@ -108,6 +161,8 @@ internal object FinanceEntryTimingParser {
                 addSchedule = m["add_schedule"] as? String,
                 triggers = asStringList(m["triggers"]),
                 invalidations = asStringList(m["invalidations"]),
+                triggersStruct = parseStructList(m["triggers_struct"]),
+                invalidationsStruct = parseStructList(m["invalidations_struct"]),
             )
         }
         return out
@@ -120,9 +175,41 @@ internal object FinanceEntryTimingParser {
         else -> null
     }
 
+    private fun asDouble(v: Any?): Double? = when (v) {
+        is Double -> v
+        is Int -> v.toDouble()
+        is Long -> v.toDouble()
+        is String -> v.toDoubleOrNull()
+        else -> null
+    }
+
     private fun asStringList(v: Any?): List<String> {
         if (v !is List<*>) return emptyList()
         return v.mapNotNull { it?.toString() }
+    }
+
+    /**
+     * Parse a `triggers_struct` / `invalidations_struct` list. Each entry is a
+     * map with `type` plus type-specific fields (value/low/high/action/etc).
+     * Unknown types are kept as `condition` so they don't break parsing.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun parseStructList(v: Any?): List<EntryTimingStructTrigger> {
+        if (v !is List<*>) return emptyList()
+        return v.mapNotNull { item ->
+            if (item !is Map<*, *>) return@mapNotNull null
+            val m = item as Map<String, Any?>
+            val type = (m["type"] as? String)?.lowercase()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            EntryTimingStructTrigger(
+                type = type,
+                value = asDouble(m["value"]),
+                low = asDouble(m["low"]),
+                high = asDouble(m["high"]),
+                action = m["action"] as? String,
+                positionPct = asInt(m["position_pct"]),
+                description = m["description"] as? String,
+            )
+        }
     }
 }
 

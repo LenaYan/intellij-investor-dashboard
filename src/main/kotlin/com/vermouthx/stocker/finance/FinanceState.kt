@@ -42,8 +42,22 @@ class FinanceState {
         /** daily-review calibration items for today (predictions vs reality). */
         val calibrationItems: List<CalibrationItem>,
         val calibrationSummary: CalibrationSummary?,
-        /** Today's thread_scenario_tree from market-research.md, or null. */
+        /**
+         * Primary scenario tree to drive the ScenarioPanel by default. Comes from
+         * market-research.md when present, else the first active_threads[] tree
+         * from thread-tracker.md.
+         */
         val scenarioTree: ThreadScenarioTree?,
+        /**
+         * All known scenario trees (today + 5-day fallback), keyed by display label.
+         * Multi-thread case: thread-tracker emits one per active_thread; combined
+         * with market-research's primary tree (if distinct).
+         *
+         * Label = "<thread_name>" or "<thread_name> · <thread_sub>" when a thread
+         * has sub-line splits. ScenarioPanel uses this to render a selector when
+         * size > 1.
+         */
+        val scenarioTrees: Map<String, ThreadScenarioTree>,
     ) {
         companion object {
             val EMPTY = Snapshot(
@@ -67,6 +81,7 @@ class FinanceState {
                 calibrationItems = emptyList(),
                 calibrationSummary = null,
                 scenarioTree = null,
+                scenarioTrees = emptyMap(),
             )
         }
     }
@@ -130,8 +145,10 @@ class FinanceState {
         // daily-review calibration items
         val (calItems, calSummary) = FinanceCalibrationLoader.load(financeDir, today)
 
-        // thread_scenario_tree from today's market-research.md (fall back up to 5 days)
-        val scenarioTree = readScenarioTree(financeDir, today)
+        // thread_scenario_tree: market-research.md (primary) + thread-tracker.md
+        // (per-active-thread). 5-day fallback walk.
+        val scenarioMap = readAllScenarioTrees(financeDir, today)
+        val scenarioTree = scenarioMap.values.firstOrNull()
 
         current.set(
             Snapshot(
@@ -155,27 +172,249 @@ class FinanceState {
                 calibrationItems = calItems,
                 calibrationSummary = calSummary,
                 scenarioTree = scenarioTree,
+                scenarioTrees = scenarioMap,
             )
         )
     }
 
-    /** Walk back up to 5 days for the first market-research.md carrying a scenario_tree. */
-    private fun readScenarioTree(financeDir: Path, today: LocalDate): ThreadScenarioTree? {
+    /**
+     * Walk back up to 5 days collecting all available scenario trees:
+     *   1. market-research.md primary tree (under `judgment_snapshot.thread_scenario_tree`),
+     *      labeled as "[main_thread name]" — kept first so it stays the default selection.
+     *   2. thread-tracker.md per-active-thread trees (under
+     *      `judgment_snapshot.active_threads[].thread_scenario_tree`), labeled as
+     *      "[thread] · [thread_sub]" or just "[thread]" if no sub.
+     *
+     * Returned map preserves insertion order (LinkedHashMap) so the ScenarioPanel
+     * sees market-research first, then thread-tracker's active threads in order.
+     */
+    private fun readAllScenarioTrees(financeDir: Path, today: LocalDate): Map<String, ThreadScenarioTree> {
+        val out = LinkedHashMap<String, ThreadScenarioTree>()
         for (b in 0..5) {
             val d = today.minusDays(b.toLong())
-            val p = financeDir.resolve("reports").resolve(d.toString()).resolve("market-research.md")
-            if (!Files.isRegularFile(p)) continue
-            try {
-                val yaml = FinanceReportYaml.extractLastYamlBlock(Files.readString(p)) ?: continue
-                val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-                val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
-                val parsed = FinanceScenarioTreeParser.fromYaml(snap)
-                if (parsed != null) return parsed
-            } catch (_: Exception) {
-                // fall through
+            val day = financeDir.resolve("reports").resolve(d.toString())
+
+            // 1) market-research primary tree
+            if (out.isEmpty()) {  // only take from the most-recent day that has anything
+                val mr = day.resolve("market-research.md")
+                if (Files.isRegularFile(mr)) {
+                    parseMarketResearchTree(mr)?.let { (label, tree) ->
+                        out[label] = tree
+                    }
+                }
             }
+
+            // 2) thread-tracker per-active-thread trees
+            val tt = day.resolve("thread-tracker.md")
+            if (Files.isRegularFile(tt)) {
+                val ttTrees = parseThreadTrackerTrees(tt)
+                if (ttTrees.isNotEmpty()) {
+                    ttTrees.forEach { (label, tree) ->
+                        out.putIfAbsent(label, tree)
+                    }
+                }
+            }
+
+            // 3) theme-incubator candidate themes → synthetic 2-branch trees (A 点火 / B 证伪)
+            //    Labeled "🔥 <theme_name>" so the user sees these are pre-ignition watches
+            //    rather than active threads.
+            val ti = day.resolve("theme-incubator.md")
+            if (Files.isRegularFile(ti)) {
+                val incTrees = parseIncubatorCandidates(ti)
+                incTrees.forEach { (label, tree) ->
+                    out.putIfAbsent(label, tree)
+                }
+            }
+
+            // 4) position-risk-monitor position_scenarios → per-position scenario trees
+            //    Labeled "💼 <position name>" for "I hold this, when do I reduce / exit"
+            val pr = day.resolve("position-risk-monitor.md")
+            if (Files.isRegularFile(pr)) {
+                val posTrees = parsePositionScenarios(pr)
+                posTrees.forEach { (label, tree) ->
+                    out.putIfAbsent(label, tree)
+                }
+            }
+            if (out.isNotEmpty()) return out
         }
-        return null
+        return out
+    }
+
+    private fun parseMarketResearchTree(path: Path): Pair<String, ThreadScenarioTree>? = try {
+        val yaml = FinanceReportYaml.extractLastYamlBlock(Files.readString(path)) ?: return null
+        val tree = FinanceReportYaml.parseSimpleYaml(yaml)
+        val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+        val parsed = FinanceScenarioTreeParser.fromYaml(snap) ?: return null
+        val label = (snap["main_thread"] as? String)?.takeIf { it.isNotBlank() }
+            ?: parsed.leaderName
+            ?: parsed.leaderSymbol
+        label to parsed
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
+     * Parse theme-incubator.md candidate_themes[] and convert each into a synthetic
+     * 2-branch ThreadScenarioTree (A 点火 / B 证伪) so the ScenarioPanel can render
+     * pre-ignition watches alongside active threads in the same selector.
+     *
+     * Requires `ignition_struct.leader_symbol` + `ignition_struct.leader_ref_price`
+     * + `ignition_struct.value` at minimum. Candidates lacking either are skipped.
+     *
+     * Branch confidences derived from `confidence_emerge` (0-10 → 0.0-1.0). Missing
+     * defaults to 0.5/0.5 split.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun parseIncubatorCandidates(path: Path): Map<String, ThreadScenarioTree> {
+        val out = LinkedHashMap<String, ThreadScenarioTree>()
+        try {
+            val yaml = FinanceReportYaml.extractLastYamlBlock(Files.readString(path)) ?: return out
+            val tree = FinanceReportYaml.parseSimpleYaml(yaml)
+            val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+            val candidates = snap["candidate_themes"] as? List<Any?> ?: return out
+            candidates.forEach { item ->
+                if (item !is Map<*, *>) return@forEach
+                val m = item as Map<String, Any?>
+                val themeName = (m["theme"] as? String)?.takeIf { it.isNotBlank() } ?: return@forEach
+                val ignition = m["ignition_struct"] as? Map<String, Any?> ?: return@forEach
+                val leaderSym = (ignition["leader_symbol"] as? String)?.takeIf { it.isNotBlank() } ?: return@forEach
+                val leaderRef = asDouble(ignition["leader_ref_price"]) ?: return@forEach
+                val ignVal = asDouble(ignition["value"]) ?: return@forEach
+
+                val invalidation = m["invalidation_struct"] as? Map<String, Any?>
+                val confidenceEmerge = asDouble(m["confidence_emerge"]) ?: 5.0
+                val igniteProb = (confidenceEmerge / 10.0).coerceIn(0.1, 0.9)
+
+                val branches = ArrayList<ScenarioBranch>(2)
+                branches.add(
+                    ScenarioBranch(
+                        id = "A_点火",
+                        condition = m["ignition_signal"] as? String,
+                        priceTriggerType = when ((ignition["type"] as? String)?.lowercase()) {
+                            "below" -> PriceTriggerType.BELOW
+                            else -> PriceTriggerType.ABOVE
+                        },
+                        priceTriggerValue = ignVal,
+                        priceTriggerLow = null,
+                        priceTriggerHigh = null,
+                        priceTriggerDays = null,
+                        volumeYiGte = asDouble(ignition["volume_yi_gte"]),
+                        nextPhase = "发酵",
+                        confidence = igniteProb,
+                        action = ignition["action"] as? String,
+                    )
+                )
+                if (invalidation != null) {
+                    val invVal = asDouble(invalidation["value"])
+                    if (invVal != null && invVal > 0) {
+                        branches.add(
+                            ScenarioBranch(
+                                id = "B_证伪",
+                                condition = m["invalidation"] as? String,
+                                priceTriggerType = when ((invalidation["type"] as? String)?.lowercase()) {
+                                    "above" -> PriceTriggerType.ABOVE
+                                    else -> PriceTriggerType.BELOW
+                                },
+                                priceTriggerValue = invVal,
+                                priceTriggerLow = null,
+                                priceTriggerHigh = null,
+                                priceTriggerDays = null,
+                                volumeYiGte = null,
+                                nextPhase = "退潮",
+                                confidence = 1.0 - igniteProb,
+                                action = invalidation["action"] as? String,
+                            )
+                        )
+                    }
+                }
+
+                val poolName = (m["candidate_pool"] as? List<Any?>)?.firstOrNull()?.let { p ->
+                    (p as? Map<*, *>)?.get("name") as? String
+                }
+                val synthetic = ThreadScenarioTree(
+                    leaderSymbol = leaderSym,
+                    leaderName = poolName,
+                    leaderRefPrice = leaderRef,
+                    refPriceDate = null,
+                    branches = branches,
+                    outOfScopeUpper = ignVal * 1.5,                     // big breakout beyond ignition
+                    outOfScopeLower = leaderRef * 0.6,                  // total death
+                    outOfScopeNote = "候选主题已远超预期或彻底走死，下一份 theme-incubator 必重审",
+                )
+                out["🔥 $themeName"] = synthetic
+            }
+        } catch (_: Exception) {
+            // fall through silently — incubator data is optional
+        }
+        return out
+    }
+
+    private fun asDouble(v: Any?): Double? = when (v) {
+        is Double -> v
+        is Int -> v.toDouble()
+        is Long -> v.toDouble()
+        is String -> v.toDoubleOrNull()
+        else -> null
+    }
+
+    /**
+     * Parse position-risk-monitor.md `position_scenarios[]`. Each entry is a full
+     * scenario_tree (same schema as §4.1.5) and gets labeled "💼 <name>" so the
+     * user can see per-position reduce/exit playbooks alongside thread scenarios.
+     *
+     * Agent is expected to only emit these for high-conviction core positions
+     * (>5% portfolio weight + clear thesis), so the selector stays manageable.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun parsePositionScenarios(path: Path): Map<String, ThreadScenarioTree> {
+        val out = LinkedHashMap<String, ThreadScenarioTree>()
+        try {
+            val yaml = FinanceReportYaml.extractLastYamlBlock(Files.readString(path)) ?: return out
+            val tree = FinanceReportYaml.parseSimpleYaml(yaml)
+            val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+            val positions = snap["position_scenarios"] as? List<Any?> ?: return out
+            positions.forEach { item ->
+                if (item !is Map<*, *>) return@forEach
+                val m = item as Map<String, Any?>
+                // Each position item IS the tree (no wrapping `thread_scenario_tree` key
+                // because the field name is `position_scenarios`). Wrap to satisfy the
+                // shared parser API.
+                val wrapped = mapOf<String, Any?>("thread_scenario_tree" to m)
+                val parsed = FinanceScenarioTreeParser.fromYaml(wrapped) ?: return@forEach
+                val displayName = parsed.leaderName ?: parsed.leaderSymbol
+                out["💼 $displayName"] = parsed
+            }
+        } catch (_: Exception) {
+            // fall through silently — position_scenarios is optional
+        }
+        return out
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parseThreadTrackerTrees(path: Path): Map<String, ThreadScenarioTree> {
+        val out = LinkedHashMap<String, ThreadScenarioTree>()
+        try {
+            val yaml = FinanceReportYaml.extractLastYamlBlock(Files.readString(path)) ?: return out
+            val tree = FinanceReportYaml.parseSimpleYaml(yaml)
+            val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+            val actives = snap["active_threads"] as? List<Any?> ?: return out
+            actives.forEach { item ->
+                if (item !is Map<*, *>) return@forEach
+                val m = item as Map<String, Any?>
+                val parsed = FinanceScenarioTreeParser.fromYaml(m) ?: return@forEach
+                val threadName = (m["thread"] as? String)?.takeIf { it.isNotBlank() }
+                val sub = (m["thread_sub"] as? String)?.takeIf { it.isNotBlank() }
+                val label = when {
+                    threadName != null && sub != null -> "$threadName · $sub"
+                    threadName != null -> threadName
+                    else -> parsed.leaderName ?: parsed.leaderSymbol
+                }
+                out[label] = parsed
+            }
+        } catch (_: Exception) {
+            // fall through
+        }
+        return out
     }
 
     fun reset() {

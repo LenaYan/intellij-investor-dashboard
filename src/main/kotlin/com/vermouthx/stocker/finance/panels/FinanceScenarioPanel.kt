@@ -1,6 +1,7 @@
 package com.vermouthx.stocker.finance.panels
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.ui.ComboBox
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
@@ -51,12 +52,27 @@ internal class FinanceScenarioPanel : JPanel(BorderLayout()) {
     private var messageBusConnection: MessageBusConnection? = null
 
     // Cached "what was the active branch last render" so we only fire a flip
-    // notification on actual transitions, not on every quote tick.
-    private var lastActiveBranchId: String? = null
-    private var lastOosKind: FinanceScenarioEvaluator.OutOfScopeKind? = null
+    // notification on actual transitions, not on every quote tick. Keyed by tree
+    // label so switching trees doesn't fire a false flip.
+    private val lastActiveBranchByLabel: MutableMap<String, String?> = HashMap()
+    private val lastOosByLabel: MutableMap<String, FinanceScenarioEvaluator.OutOfScopeKind?> = HashMap()
 
     /** Latest evaluation (or null if no tree + no quote). */
     private var latestEval: FinanceScenarioEvaluator.Evaluation? = null
+
+    /** User-selected scenario tree label; null = use snapshot's default (first). */
+    private var selectedLabel: String? = null
+
+    /** Top-of-panel selector. Visible only when scenarioTrees.size > 1. */
+    private val selector = ComboBox<String>().apply {
+        isVisible = false
+        addActionListener {
+            val choice = selectedItem as? String ?: return@addActionListener
+            if (choice == selectedLabel) return@addActionListener
+            selectedLabel = choice
+            rebuild()
+        }
+    }
 
     init {
         background = JBColor.background()
@@ -82,8 +98,34 @@ internal class FinanceScenarioPanel : JPanel(BorderLayout()) {
         messageBusConnection = null
     }
 
+    /** Resolve which tree to show: user selection (if still present), else snapshot default. */
+    private fun resolveActiveTree(): Pair<String, ThreadScenarioTree>? {
+        val snap = FinanceBridgeService.instance.snapshot()
+        val trees = snap.scenarioTrees
+        if (trees.isEmpty()) return null
+        val choice = selectedLabel
+        if (choice != null && trees.containsKey(choice)) {
+            return choice to trees.getValue(choice)
+        }
+        val firstEntry = trees.entries.first()
+        return firstEntry.key to firstEntry.value
+    }
+
+    private fun syncSelectorOptions() {
+        val snap = FinanceBridgeService.instance.snapshot()
+        val labels = snap.scenarioTrees.keys.toList()
+        selector.removeAllItems()
+        labels.forEach { selector.addItem(it) }
+        // Visible only when multi-thread
+        selector.isVisible = labels.size > 1
+        if (labels.isEmpty()) return
+        val chosen = selectedLabel?.takeIf { it in labels } ?: labels.first()
+        selectedLabel = chosen
+        if (selector.selectedItem != chosen) selector.selectedItem = chosen
+    }
+
     private fun onQuotes(quotes: List<StockerQuote>) {
-        val tree = FinanceBridgeService.instance.snapshot().scenarioTree ?: return
+        val (_, tree) = resolveActiveTree() ?: return
         if (quotes.isEmpty()) return
         val leaderKey = tree.leaderKey
         val q = quotes.firstOrNull { FinanceSymbol.normalize(it.code) == leaderKey } ?: return
@@ -95,16 +137,17 @@ internal class FinanceScenarioPanel : JPanel(BorderLayout()) {
     }
 
     /**
-     * Full rebuild — called when scenario_tree changes (file watcher) or panel first mounts.
-     * If a leader quote was already cached, replay evaluation against it.
+     * Full rebuild — called when scenario_trees changes (file watcher), panel first
+     * mounts, or user picks a different tree from the selector.
      */
     private fun rebuild() {
-        val snap = FinanceBridgeService.instance.snapshot()
-        val tree = snap.scenarioTree
-        if (tree == null) {
+        syncSelectorOptions()
+        val resolved = resolveActiveTree()
+        if (resolved == null) {
             renderEmptyState()
             return
         }
+        val (_, tree) = resolved
         // No live price yet — render static header with awaiting state
         val priorEval = latestEval
         if (priorEval != null && priorEval.tree.leaderKey == tree.leaderKey) {
@@ -121,7 +164,7 @@ internal class FinanceScenarioPanel : JPanel(BorderLayout()) {
         removeAll()
         val msg = JBLabel(
             "<html><center>暂无 <code>thread_scenario_tree</code> 数据。<br>" +
-                "今日 market-research 跑出 v2.1 schema YAML 后会自动出现。</center></html>",
+                "今日 market-research 或 thread-tracker 跑出 v2.x schema YAML 后会自动出现。</center></html>",
             SwingConstants.CENTER
         ).apply {
             foreground = JBColor.GRAY
@@ -134,7 +177,7 @@ internal class FinanceScenarioPanel : JPanel(BorderLayout()) {
 
     private fun renderStaticHeader(tree: ThreadScenarioTree) {
         removeAll()
-        add(buildHeader(tree, currentPrice = null, changePct = null, oosKind = null), BorderLayout.NORTH)
+        add(wrapTopWithSelector(buildHeader(tree, null, null, null)), BorderLayout.NORTH)
         add(buildBranchList(tree, statuses = emptyList(), activeId = null), BorderLayout.CENTER)
         revalidate()
         repaint()
@@ -144,7 +187,10 @@ internal class FinanceScenarioPanel : JPanel(BorderLayout()) {
         latestEval = eval
         maybeFireFlipNotification(eval)
         removeAll()
-        add(buildHeader(eval.tree, eval.leaderPrice, eval.leaderChangePct, eval.outOfScope), BorderLayout.NORTH)
+        add(
+            wrapTopWithSelector(buildHeader(eval.tree, eval.leaderPrice, eval.leaderChangePct, eval.outOfScope)),
+            BorderLayout.NORTH
+        )
         add(buildBranchList(eval.tree, eval.branchStatuses, eval.activeBranchId), BorderLayout.CENTER)
         // OOS footer banner (only when triggered)
         if (eval.outOfScope != null) {
@@ -154,26 +200,50 @@ internal class FinanceScenarioPanel : JPanel(BorderLayout()) {
         repaint()
     }
 
+    /** Stack the multi-thread selector (visible only when > 1 tree) above the header. */
+    private fun wrapTopWithSelector(header: Component): JPanel {
+        val box = JBPanel<JBPanel<*>>().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            isOpaque = false
+        }
+        if (selector.isVisible) {
+            val selectorRow = JBPanel<JBPanel<*>>(BorderLayout()).apply {
+                isOpaque = false
+                border = BorderFactory.createEmptyBorder(2, 8, 4, 8)
+                add(JBLabel("查看主线: ").apply { foreground = JBColor.GRAY }, BorderLayout.WEST)
+                add(selector, BorderLayout.CENTER)
+            }
+            box.add(selectorRow)
+        }
+        box.add(header)
+        return box
+    }
+
     private fun maybeFireFlipNotification(eval: FinanceScenarioEvaluator.Evaluation) {
         val notifier = FinanceBridgeService.instance.getNotifier() ?: return
         val tree = eval.tree
         val curBranch = eval.activeBranchId
         val curOos = eval.outOfScope
+        // Key flip state by tree label so switching threads in the dropdown
+        // doesn't fire a spurious flip for the newly-selected thread.
+        val label = selectedLabel ?: (tree.leaderName ?: tree.leaderSymbol)
+        val priorBranch = lastActiveBranchByLabel[label]
+        val priorOos = lastOosByLabel[label]
 
-        if (curOos != null && curOos != lastOosKind) {
+        if (curOos != null && curOos != priorOos) {
             val threshold = eval.breachedThreshold ?: 0.0
             val dir = if (curOos == FinanceScenarioEvaluator.OutOfScopeKind.UP) "上沿" else "下沿"
-            val mainThreadName = FinanceBridgeService.instance.snapshot().mainThread ?: "本主线"
+            val mainThreadName = FinanceBridgeService.instance.snapshot().mainThread ?: label
             val detail = "走势超出${dir} ¥${"%.2f".format(threshold)}\n主线 \"$mainThreadName\" 已不在任何预案分支内 — 次日需重审主线"
             notifier.fire(
                 tree.leaderSymbol, tree.leaderName ?: tree.leaderSymbol,
                 FinanceNotifier.Kind.THREAD_OUT_OF_SCOPE,
                 eval.leaderPrice, eval.leaderChangePct, detail
             )
-        } else if (curBranch != null && curBranch != lastActiveBranchId && curOos == null) {
+        } else if (curBranch != null && curBranch != priorBranch && curOos == null) {
             val branch = tree.branches.firstOrNull { it.id == curBranch }
             val detail = buildString {
-                append("当前进入分支: $curBranch")
+                append("[${label}] 当前进入分支: $curBranch")
                 if (!branch?.nextPhase.isNullOrBlank()) append(" → ${branch?.nextPhase}")
                 if (!branch?.condition.isNullOrBlank()) append("\n触发: ${branch?.condition}")
                 if (!branch?.action.isNullOrBlank()) append("\n建议: ${branch?.action}")
@@ -185,8 +255,8 @@ internal class FinanceScenarioPanel : JPanel(BorderLayout()) {
             )
         }
 
-        lastActiveBranchId = curBranch
-        lastOosKind = curOos
+        lastActiveBranchByLabel[label] = curBranch
+        lastOosByLabel[label] = curOos
     }
 
     // ── widget builders ──────────────────────────────────────────────────────

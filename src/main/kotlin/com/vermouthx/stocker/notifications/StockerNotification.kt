@@ -45,50 +45,54 @@ object StockerNotification {
         return if (isChinese()) """
             <div style="${Styles.CONTAINER}">
                 <p style="${Styles.PARAGRAPH}">🎉 <strong>欢迎使用 Stocker v${v}！本次更新内容：</strong></p>
-                <h4 style="${Styles.HEADING}">✨ v${v} 新功能</h4>
+                <h4 style="${Styles.HEADING}">✨ v${v} 新功能 — ScenarioPanel 多来源</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>主线追踪标签升级为分支预案状态机</strong>
+                    <li style="${Styles.LIST_ITEM}">✨ <strong>主线追踪面板现在从 4 个 agent 来源消费分支树</strong>（v2.3 schema）
                         <ul style="${Styles.SUB_LIST}">
-                            <li>解析今日 market-research.md 的 <code>thread_scenario_tree</code>，分支 A / B / C 全部可视化</li>
-                            <li>每个分支带进度条，实时显示龙头价格距离触发条件的远近</li>
-                            <li>当前匹配的分支高亮显示；龙头跌出预案区时顶部出现红色 banner</li>
-                            <li>原 markdown 长文在可调整的下方面板里保留（65:35 分割）</li>
+                            <li><code>market-research</code> 主线树（无前缀）</li>
+                            <li><code>thread-tracker</code> 每条活跃主线（无前缀）</li>
+                            <li>🔥 <code>theme-incubator</code> 候选主题（synthetic A 点火 / B 证伪）</li>
+                            <li>💼 <code>position-risk-monitor</code> 持仓预案（synthetic A 持有 / B 减半 / C 清仓）</li>
+                            <li>≥2 条时面板顶部出现下拉切换器</li>
                         </ul>
                     </li>
-                    <li style="${Styles.LIST_ITEM}">🔔 <strong>新增两个主线级通知</strong>
+                    <li style="${Styles.LIST_ITEM}">✨ <strong>"距阈值"列消除正则脆弱性</strong>
                         <ul style="${Styles.SUB_LIST}">
-                            <li><code>THREAD_BRANCH_FLIP</code>：活跃分支切换（B 横盘 → A 主升 等）</li>
-                            <li><code>THREAD_OUT_OF_SCOPE</code>：龙头脱离所有预案（agent 需重审）</li>
+                            <li>v2.3 <code>triggers_struct</code> 结构化字段优先于正则抽数字</li>
+                            <li>区间式 pullback 触发（如"回踩 67-69"）现在正确检查整个区间，旧逻辑只能锚单点 ±1.5%</li>
+                            <li>pre-v2.3 报告通过正则保留兜底</li>
                         </ul>
                     </li>
                 </ul>
                 <div style="${Styles.INFO_BOX}">
-                    <p style="margin: 0; font-size: 12px;">💡 <strong>说明：</strong>需要今日 market-research 报告里包含 v2.1 schema 的 <code>thread_scenario_tree</code> 字段；否则面板显示"暂无数据"。</p>
+                    <p style="margin: 0; font-size: 12px;">💡 <strong>说明：</strong>需要对应 agent 报告里包含 v2.3 schema 字段（<code>thread_scenario_tree</code> / <code>triggers_struct</code> / <code>ignition_struct</code> / <code>position_scenarios</code>）。</p>
                 </div>
                 <p style="${Styles.SMALL_TEXT}">💖 如果您觉得这个插件有帮助，请考虑点击下方的 <strong>Donate</strong> 按钮以支持开发。谢谢！📈</p>
             </div>
         """.trimIndent() else """
             <div style="${Styles.CONTAINER}">
                 <p style="${Styles.PARAGRAPH}">🎉 <strong>Welcome to Stocker v${v}! Here's what's new in this release:</strong></p>
-                <h4 style="${Styles.HEADING}">✨ New in v${v}</h4>
+                <h4 style="${Styles.HEADING}">✨ New in v${v} — Multi-source ScenarioPanel</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>Thread Tracker is now a live scenario state machine</strong>
+                    <li style="${Styles.LIST_ITEM}">✨ <strong>Thread Tracker panel now consumes scenario trees from 4 agent sources</strong> (v2.3 schema)
                         <ul style="${Styles.SUB_LIST}">
-                            <li>Parses today's market-research <code>thread_scenario_tree</code> and renders each branch (A / B / C) visually</li>
-                            <li>Each branch has a progress bar showing the leader's live distance to its trigger</li>
-                            <li>The currently-matching branch is highlighted; out-of-scope breach raises a red banner</li>
-                            <li>The original markdown narrative is preserved in a resizable lower pane (65:35 split)</li>
+                            <li><code>market-research</code> primary tree (no prefix)</li>
+                            <li><code>thread-tracker</code> per-active-thread (no prefix)</li>
+                            <li>🔥 <code>theme-incubator</code> candidates (synthetic A 点火 / B 证伪)</li>
+                            <li>💼 <code>position-risk-monitor</code> positions (synthetic A 持有 / B 减半 / C 清仓)</li>
+                            <li>Dropdown selector appears when ≥2 trees are available</li>
                         </ul>
                     </li>
-                    <li style="${Styles.LIST_ITEM}">🔔 <strong>Two new thread-level notifications</strong>
+                    <li style="${Styles.LIST_ITEM}">✨ <strong>Trigger Distance column eliminates regex fragility</strong>
                         <ul style="${Styles.SUB_LIST}">
-                            <li><code>THREAD_BRANCH_FLIP</code>: the active branch transitioned (e.g. B → A)</li>
-                            <li><code>THREAD_OUT_OF_SCOPE</code>: leader exited every branch (agent needs to re-review)</li>
+                            <li>v2.3 <code>triggers_struct</code> structured fields take precedence over regex extraction</li>
+                            <li>Range pullback triggers (e.g. "回踩 67-69") now check the whole range, not just a single point ±1.5%</li>
+                            <li>Pre-v2.3 reports fall back to regex extraction unchanged</li>
                         </ul>
                     </li>
                 </ul>
                 <div style="${Styles.INFO_BOX}">
-                    <p style="margin: 0; font-size: 12px;">💡 <strong>Tip:</strong> Requires today's market-research.md to include a v2.1 schema <code>thread_scenario_tree</code> block; otherwise the panel shows an empty state.</p>
+                    <p style="margin: 0; font-size: 12px;">💡 <strong>Tip:</strong> Requires corresponding agent reports to carry v2.3 schema fields (<code>thread_scenario_tree</code> / <code>triggers_struct</code> / <code>ignition_struct</code> / <code>position_scenarios</code>).</p>
                 </div>
                 <p style="${Styles.SMALL_TEXT}">💖 If you find this plugin helpful, please consider clicking the <strong>Donate</strong> button below to support its development. Thank you! 📈</p>
             </div>

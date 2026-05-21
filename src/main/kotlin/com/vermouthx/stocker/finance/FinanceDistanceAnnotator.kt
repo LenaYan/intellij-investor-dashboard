@@ -100,7 +100,28 @@ internal object FinanceDistanceAnnotator {
             return Cell(Level.ALERT, text, tip)
         }
 
-        // 2) Inside trigger ±1.5% window → WARN
+        // 2) v2.3 range trigger — if a pullback zone is defined, check inside-window
+        //    semantics properly (current price in [low * 0.985, high * 1.015]) instead
+        //    of the legacy single-point ±1.5%. This avoids "false miss" when the
+        //    pullback range is wider than 3% (e.g. 67-69 → ±1.5% of 67 = 66.0-68.0
+        //    leaves 68.0-69.0 unflagged under the legacy logic).
+        val pullbackZone = rec?.pullbackZone
+        if (pullbackZone != null) {
+            val (lo, hi) = pullbackZone
+            val zoneLower = lo * 0.985
+            val zoneUpper = hi * 1.015
+            if (currentPrice in zoneLower..zoneUpper) {
+                val tip = buildString {
+                    append("进入回踩区间 ¥${"%.2f".format(lo)}~¥${"%.2f".format(hi)} (含 ±1.5%)")
+                    if (actionHint != null) append("\n建议: $actionHint")
+                    append("\n来源: $source · structured")
+                }
+                val text = "${gradeBadge.orEmpty()}● ¥${"%.2f".format(lo)}~${"%.2f".format(hi)}"
+                return Cell(Level.WARN, text, tip)
+            }
+        }
+
+        // 3) Single-anchor trigger within ±1.5% (breakout / legacy fallback)
         if (anchorTrigger != null) {
             val pctToTrig = (currentPrice - anchorTrigger) / anchorTrigger * 100.0
             if (abs(pctToTrig) <= 1.5) {
