@@ -8,6 +8,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.util.messages.MessageBusConnection
 import com.vermouthx.stocker.entities.StockerQuote
+import com.vermouthx.stocker.enums.StockerMarketType
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier
 import com.vermouthx.stocker.settings.StockerSetting
 import java.nio.file.Path
@@ -76,6 +77,44 @@ class FinanceBridgeService : Disposable {
     fun healthOf(code: String?): FinanceState.Health = state.healthOf(code)
 
     fun watchlistEntry(code: String?): WatchlistEntry? = state.watchlistEntry(code)
+
+    /**
+     * Group watchlist symbols into the four Stocker market buckets so [StockerApp] can
+     * fold them into the per-market HTTP fetch (no duplicate requests for codes that
+     * happen to live in both the user's "我的自选" and the Claude/watchlist.json).
+     *
+     * Returned codes are stripped of the `.SH` / `.SZ` / `.BJ` / `.HK` / `.US` suffix to
+     * match the format Stocker's quote provider expects.
+     */
+    fun watchlistCodesByMarket(): Map<StockerMarketType, List<String>> {
+        val out = HashMap<StockerMarketType, MutableList<String>>()
+        snapshot().watchlistBySymbol.values.forEach { entry ->
+            val market = inferMarket(entry.symbol) ?: return@forEach
+            val bareCode = entry.symbol.substringBefore('.').trim()
+            if (bareCode.isNotEmpty()) {
+                out.getOrPut(market) { ArrayList() }.add(bareCode)
+            }
+        }
+        return out
+    }
+
+    /** Suffix-then-shape inference: ".SH"/".SZ"/".BJ" → CN, ".HK" → HK, ".US" → US. */
+    private fun inferMarket(symbol: String): StockerMarketType? {
+        val suffix = symbol.substringAfter('.', missingDelimiterValue = "").uppercase()
+        when (suffix) {
+            "SH", "SZ", "BJ" -> return StockerMarketType.AShare
+            "HK" -> return StockerMarketType.HKStocks
+            "US" -> return StockerMarketType.USStocks
+        }
+        // Fallback: infer from code shape when the symbol has no suffix
+        val bare = symbol.substringBefore('.').trim()
+        return when {
+            FinanceSymbol.isAShareCode(bare) -> StockerMarketType.AShare
+            bare.length == 5 && bare.all { it.isDigit() } -> StockerMarketType.HKStocks
+            bare.isNotEmpty() && bare.all { it.isLetter() } -> StockerMarketType.USStocks
+            else -> null
+        }
+    }
 
     /**
      * Idempotent. Called by [com.vermouthx.stocker.activities.StockerStartupActivity].

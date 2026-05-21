@@ -45,34 +45,38 @@ object StockerNotification {
         return if (isChinese()) """
             <div style="${Styles.CONTAINER}">
                 <p style="${Styles.PARAGRAPH}">🎉 <strong>欢迎使用 Stocker v${v}！本次更新内容：</strong></p>
-                <h4 style="${Styles.HEADING}">🐛 v${v} 错误修复</h4>
+                <h4 style="${Styles.HEADING}">✨ v${v} 新功能</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">🐛 修复 <strong>设置 → 可见列</strong> 面板缺失"健康度"和"距阈值"复选框，导致 1.21.0 用户无法从 UI 启用新列的问题</li>
-                </ul>
-                <h4 style="${Styles.HEADING}">✨ v1.21 新功能回顾</h4>
-                <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>"距阈值"列</strong>：实时显示当前价距 finance/ watchlist 与 entry-timing trigger / invalidation 价位的距离；进入触发区 ±1.5% → 琥珀色背景；跌破失效价 → 红色背景</li>
-                    <li style="${Styles.LIST_ITEM}">🔕 watchlist trigger / invalidation 命中、entry-timing 买点命中不再弹气泡通知（市场异动 ±5% / ±7% 和涨跌停通知保持不变）</li>
+                    <li style="${Styles.LIST_ITEM}">✨ <strong>新增"盯盘"标签</strong>
+                        <ul style="${Styles.SUB_LIST}">
+                            <li>在 CN / HK / US / Crypto 旁新增专用 tab，只读展示 <code>~/Claude/finance/watchlist.json</code> 里的全部标的（跨市场合并）</li>
+                            <li>配合"距阈值"列实时高亮 agent 触发价/失效价的接近程度</li>
+                            <li>watchlist.json 改动时自动刷新（file watcher）</li>
+                            <li>行情拉取去重，不增加额外网络请求</li>
+                        </ul>
+                    </li>
                 </ul>
                 <div style="${Styles.INFO_BOX}">
-                    <p style="margin: 0; font-size: 12px;">💡 <strong>说明：</strong>升级后到 <strong>设置 → 工具 → Stocker</strong> 的可见列里勾选"距阈值"（及"健康度"）即可启用。</p>
+                    <p style="margin: 0; font-size: 12px;">💡 <strong>说明：</strong>需要 <strong>设置 → 工具 → Stocker → Finance bridge</strong> 已启用，并且 <code>~/Claude/finance/watchlist.json</code> 存在。</p>
                 </div>
                 <p style="${Styles.SMALL_TEXT}">💖 如果您觉得这个插件有帮助，请考虑点击下方的 <strong>Donate</strong> 按钮以支持开发。谢谢！📈</p>
             </div>
         """.trimIndent() else """
             <div style="${Styles.CONTAINER}">
                 <p style="${Styles.PARAGRAPH}">🎉 <strong>Welcome to Stocker v${v}! Here's what's new in this release:</strong></p>
-                <h4 style="${Styles.HEADING}">🐛 Bug Fixes in v${v}</h4>
+                <h4 style="${Styles.HEADING}">✨ New in v${v}</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">🐛 Fixed <strong>Settings → Visible columns</strong> panel missing the Health and Trigger Distance checkboxes, so 1.21.0 users could not enable the new columns from the UI</li>
-                </ul>
-                <h4 style="${Styles.HEADING}">✨ v1.21 Feature Recap</h4>
-                <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>Trigger Distance column</strong>: live distance between current price and finance/ watchlist or entry-timing trigger / invalidation prices; amber bg inside trigger ±1.5%; red bg when invalidation is breached</li>
-                    <li style="${Styles.LIST_ITEM}">🔕 Watchlist trigger / invalidation and entry-timing buy-point hits no longer surface as popups (market anomaly ±5% / ±7% and A-share limit-up / limit-down notifications still fire as before)</li>
+                    <li style="${Styles.LIST_ITEM}">✨ <strong>Watchlist tab</strong>
+                        <ul style="${Styles.SUB_LIST}">
+                            <li>A dedicated read-only tab next to CN / HK / US / Crypto that consolidates every symbol in <code>~/Claude/finance/watchlist.json</code> across markets</li>
+                            <li>Pairs with the Trigger Distance column for live proximity highlights against agent trigger / invalidation prices</li>
+                            <li>Auto-refreshes when watchlist.json changes (file watcher)</li>
+                            <li>Folds watchlist codes into the existing per-market fetch (deduped) — no extra HTTP traffic</li>
+                        </ul>
+                    </li>
                 </ul>
                 <div style="${Styles.INFO_BOX}">
-                    <p style="margin: 0; font-size: 12px;">💡 <strong>Tip:</strong> After upgrade, enable the column under <strong>Settings → Tools → Stocker</strong> → Visible columns → "Trigger Dist." (and "Health").</p>
+                    <p style="margin: 0; font-size: 12px;">💡 <strong>Tip:</strong> Requires <strong>Settings → Tools → Stocker → Finance bridge</strong> enabled and <code>~/Claude/finance/watchlist.json</code> present.</p>
                 </div>
                 <p style="${Styles.SMALL_TEXT}">💖 If you find this plugin helpful, please consider clicking the <strong>Donate</strong> button below to support its development. Thank you! 📈</p>
             </div>

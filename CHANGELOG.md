@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.22.0
+
+### ✨ New Features / 新功能
+
+- Added a dedicated **Watchlist** tab next to the market tabs (CN / HK / US / Crypto). It shows the symbols in `~/Claude/finance/watchlist.json` as a read-only consolidated view across markets, with the Trigger Distance column highlighting price proximity to agent triggers and invalidations. The consolidated quote fetch in StockerApp folds watchlist codes into the per-market HTTP calls (deduped), so no extra network roundtrips are added / 在市场标签（CN / HK / US / Crypto）旁新增专用的"盯盘"标签，跨市场只读展示 `~/Claude/finance/watchlist.json` 里的标的，配合"距阈值"列高亮 agent 触发价/失效价的接近程度。行情拉取在 StockerApp 中合并 watchlist 代码到各市场 HTTP 请求里（去重），不增加额外网络往返
+- Watchlist tab updates automatically when `~/Claude/finance/watchlist.json` changes (file watcher triggers a table reset; next refresh cycle re-populates) / watchlist.json 改动时盯盘标签自动重置（file watcher 触发清空，下个刷新周期重新填入）
+
 ## 1.21.1
 
 ### 🐛 Bug Fixes / 错误修复

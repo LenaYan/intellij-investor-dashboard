@@ -5,6 +5,7 @@ import com.vermouthx.stocker.entities.StockerQuote
 import com.vermouthx.stocker.enums.StockerMarketIndex
 import com.vermouthx.stocker.enums.StockerMarketType
 import com.vermouthx.stocker.enums.StockerQuoteProvider
+import com.vermouthx.stocker.finance.FinanceBridgeService
 import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.*
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.*
 import com.vermouthx.stocker.settings.StockerSetting
@@ -78,10 +79,21 @@ class StockerApp {
             val quoteProvider = setting.quoteProvider
             val cryptoQuoteProvider = setting.cryptoQuoteProvider
 
+            // Watchlist codes from ~/Claude/finance/watchlist.json get folded into the
+            // per-market fetch so we don't issue duplicate HTTP requests for codes that
+            // happen to live in both setting.xxxList and the watchlist. The existing
+            // CN / HK / US tabs still only display rows that are present in setting.xxxList
+            // (the size guard in StockerQuoteUpdateListener caps addRow); the new
+            // Watchlist tab uses its own filtering listener.
+            val watchlistByMarket = FinanceBridgeService.instance.watchlistCodesByMarket()
+            val aShareCodes = unionCodes(setting.aShareList, watchlistByMarket[StockerMarketType.AShare])
+            val hkCodes     = unionCodes(setting.hkStocksList, watchlistByMarket[StockerMarketType.HKStocks])
+            val usCodes     = unionCodes(setting.usStocksList, watchlistByMarket[StockerMarketType.USStocks])
+
             // Fetch all market data once
-            val aShareQuotes = fetchQuotesIfActive(StockerMarketType.AShare, quoteProvider, setting.aShareList) ?: return@Runnable
-            val hkStocksQuotes = fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider, setting.hkStocksList) ?: return@Runnable
-            val usStocksQuotes = fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider, setting.usStocksList) ?: return@Runnable
+            val aShareQuotes = fetchQuotesIfActive(StockerMarketType.AShare, quoteProvider, aShareCodes) ?: return@Runnable
+            val hkStocksQuotes = fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider, hkCodes) ?: return@Runnable
+            val usStocksQuotes = fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider, usCodes) ?: return@Runnable
             val cryptoQuotes = fetchQuotesIfActive(StockerMarketType.Crypto, cryptoQuoteProvider, setting.cryptoList) ?: return@Runnable
 
             val aShareIndices = fetchQuotesIfActive(StockerMarketType.AShare, quoteProvider, StockerMarketIndex.CN.codes) ?: return@Runnable
@@ -126,19 +138,19 @@ class StockerApp {
             allPublisher.syncQuotes(allStockQuotes, setting.allStockListSize)
             allPublisher.syncIndices(allStockIndices)
 
-            // Fetch intraday data for sparkline display
+            // Fetch intraday data for sparkline display (favourites + watchlist union)
             if (!shouldContinueRefresh()) return@Runnable
             val intradayMap = mutableMapOf<String, com.vermouthx.stocker.entities.StockerIntradayData>()
-            if (setting.aShareList.isNotEmpty()) {
-                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.AShare, setting.aShareList))
+            if (aShareCodes.isNotEmpty()) {
+                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.AShare, aShareCodes))
             }
             if (!shouldContinueRefresh()) return@Runnable
-            if (setting.hkStocksList.isNotEmpty()) {
-                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.HKStocks, setting.hkStocksList))
+            if (hkCodes.isNotEmpty()) {
+                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.HKStocks, hkCodes))
             }
             if (!shouldContinueRefresh()) return@Runnable
-            if (setting.usStocksList.isNotEmpty()) {
-                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.USStocks, setting.usStocksList))
+            if (usCodes.isNotEmpty()) {
+                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.USStocks, usCodes))
             }
             if (intradayMap.isNotEmpty()) {
                 StockerTableView.syncAllIntradayData(intradayMap)
@@ -159,6 +171,20 @@ class StockerApp {
 
     private fun shouldContinueRefresh(): Boolean {
         return refreshActive && !Thread.currentThread().isInterrupted
+    }
+
+    /** Combine the user's persisted favourites with the watchlist additions; preserves
+     *  favourite order, appends only new watchlist codes at the end. */
+    private fun unionCodes(favourites: List<String>, watchlist: List<String>?): List<String> {
+        if (watchlist.isNullOrEmpty()) return favourites
+        val seen = HashSet<String>(favourites.size + watchlist.size)
+        seen.addAll(favourites)
+        val out = ArrayList<String>(favourites.size + watchlist.size)
+        out.addAll(favourites)
+        for (c in watchlist) {
+            if (c.isNotBlank() && seen.add(c)) out.add(c)
+        }
+        return out
     }
 
 }

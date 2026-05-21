@@ -9,7 +9,9 @@ import com.intellij.ui.content.ContentFactory
 import com.intellij.util.messages.MessageBusConnection
 import com.vermouthx.stocker.StockerApp
 import com.vermouthx.stocker.StockerAppManager
+import com.vermouthx.stocker.StockerBundle
 import com.vermouthx.stocker.enums.StockerMarketType
+import com.vermouthx.stocker.finance.FinanceBridgeService
 import com.vermouthx.stocker.finance.panels.FinanceToolWindowPanel
 import com.vermouthx.stocker.listeners.StockerQuoteDeleteListener
 import com.vermouthx.stocker.listeners.StockerQuoteDeleteNotifier.*
@@ -17,6 +19,7 @@ import com.vermouthx.stocker.listeners.StockerQuoteReloadListener
 import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.*
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateListener
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.*
+import com.vermouthx.stocker.listeners.WatchlistQuoteUpdateListener
 
 class StockerToolWindow : ToolWindowFactory {
 
@@ -26,6 +29,8 @@ class StockerToolWindow : ToolWindowFactory {
     private lateinit var tabViewMap: Map<StockerMarketType, StockerSimpleToolWindow>
     private lateinit var myApplication: StockerApp
     private var financePanel: FinanceToolWindowPanel? = null
+    private var watchlistView: StockerSimpleToolWindow? = null
+    private var watchlistRefreshListener: (() -> Unit)? = null
     private val messageBusConnections = mutableListOf<MessageBusConnection>()
 
     override fun init(toolWindow: ToolWindow) {
@@ -69,8 +74,34 @@ class StockerToolWindow : ToolWindowFactory {
         )
         contentManager.addContent(cryptoContent)
 
-        // Finance tab — only visible when the finance/ bridge is enabled.
+        // Watchlist tab — read-only view of ~/Claude/finance/watchlist.json. Only created
+        // when the finance bridge is enabled; sits between Crypto and Finance so the
+        // market tabs stay grouped together on the left.
         val setting = com.vermouthx.stocker.settings.StockerSetting.instance
+        if (setting.financeBridgeEnabled) {
+            val watchlist = StockerSimpleToolWindow()
+            watchlistView = watchlist
+            val watchlistContent = contentFactory.createContent(
+                watchlist.component,
+                StockerBundle.message("tab.watchlist"),
+                false
+            )
+            contentManager.addContent(watchlistContent)
+
+            // When watchlist.json changes, clear the table so the next quote refresh
+            // re-populates with only the symbols still in the file. This avoids leaving
+            // stale rows behind when the user removes entries from watchlist.json.
+            val listener: () -> Unit = {
+                javax.swing.SwingUtilities.invokeLater {
+                    val model = watchlist.tableView.tableModel
+                    if (model.rowCount > 0) model.setRowCount(0)
+                }
+            }
+            FinanceBridgeService.instance.addRefreshListener(listener)
+            watchlistRefreshListener = listener
+        }
+
+        // Finance tab — only visible when the finance/ bridge is enabled.
         if (setting.financeBridgeEnabled) {
             val finance = FinanceToolWindowPanel()
             financePanel = finance
@@ -97,6 +128,11 @@ class StockerToolWindow : ToolWindowFactory {
             it.tableView.dispose()
             it.disposeFinance()
         }
+        watchlistView?.tableView?.dispose()
+        watchlistView?.disposeFinance()
+        watchlistView = null
+        watchlistRefreshListener?.let { FinanceBridgeService.instance.removeRefreshListener(it) }
+        watchlistRefreshListener = null
         financePanel?.dispose()
         financePanel = null
 
@@ -116,6 +152,17 @@ class StockerToolWindow : ToolWindowFactory {
         messageBusConnections.add(messageBus.connect().apply {
             subscribe(STOCK_ALL_QUOTE_RELOAD_TOPIC, StockerQuoteReloadListener(allView.tableView))
         })
+
+        // Watchlist tab piggybacks on the ALL topic and filters down to symbols present
+        // in ~/Claude/finance/watchlist.json (see WatchlistQuoteUpdateListener).
+        watchlistView?.let { v ->
+            messageBusConnections.add(messageBus.connect().apply {
+                subscribe(STOCK_ALL_QUOTE_UPDATE_TOPIC, WatchlistQuoteUpdateListener(v.tableView))
+            })
+            messageBusConnections.add(messageBus.connect().apply {
+                subscribe(STOCK_ALL_QUOTE_RELOAD_TOPIC, StockerQuoteReloadListener(v.tableView))
+            })
+        }
         
         tabViewMap.forEach { (market, myTableView) ->
             when (market) {
