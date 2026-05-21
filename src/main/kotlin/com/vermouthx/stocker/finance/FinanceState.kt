@@ -42,6 +42,8 @@ class FinanceState {
         /** daily-review calibration items for today (predictions vs reality). */
         val calibrationItems: List<CalibrationItem>,
         val calibrationSummary: CalibrationSummary?,
+        /** Today's thread_scenario_tree from market-research.md, or null. */
+        val scenarioTree: ThreadScenarioTree?,
     ) {
         companion object {
             val EMPTY = Snapshot(
@@ -64,6 +66,7 @@ class FinanceState {
                 threadHealthSeries = emptyList(),
                 calibrationItems = emptyList(),
                 calibrationSummary = null,
+                scenarioTree = null,
             )
         }
     }
@@ -127,6 +130,9 @@ class FinanceState {
         // daily-review calibration items
         val (calItems, calSummary) = FinanceCalibrationLoader.load(financeDir, today)
 
+        // thread_scenario_tree from today's market-research.md (fall back up to 5 days)
+        val scenarioTree = readScenarioTree(financeDir, today)
+
         current.set(
             Snapshot(
                 watchlistBySymbol = watchlist.associateBy { it.normalizedKey },
@@ -148,8 +154,28 @@ class FinanceState {
                 threadHealthSeries = healthSeries,
                 calibrationItems = calItems,
                 calibrationSummary = calSummary,
+                scenarioTree = scenarioTree,
             )
         )
+    }
+
+    /** Walk back up to 5 days for the first market-research.md carrying a scenario_tree. */
+    private fun readScenarioTree(financeDir: Path, today: LocalDate): ThreadScenarioTree? {
+        for (b in 0..5) {
+            val d = today.minusDays(b.toLong())
+            val p = financeDir.resolve("reports").resolve(d.toString()).resolve("market-research.md")
+            if (!Files.isRegularFile(p)) continue
+            try {
+                val yaml = FinanceReportYaml.extractLastYamlBlock(Files.readString(p)) ?: continue
+                val tree = FinanceReportYaml.parseSimpleYaml(yaml)
+                val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+                val parsed = FinanceScenarioTreeParser.fromYaml(snap)
+                if (parsed != null) return parsed
+            } catch (_: Exception) {
+                // fall through
+            }
+        }
+        return null
     }
 
     fun reset() {

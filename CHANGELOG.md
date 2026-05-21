@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.23.0
+
+### ✨ New Features / 新功能
+
+- Thread Tracker tab upgraded from a static markdown viewer into a live **scenario state-machine panel**. Today's `thread_scenario_tree` from `market-research.md` is parsed and rendered as branch rows (A 乐观 / B 基准 / C 悲观), each with a progress bar tracking how close the leader's live price is to that branch's trigger. The branch matching the current price is highlighted; if the leader breaches `out_of_scope_threshold.upper / .lower` a red banner appears with "agent 需重审主线". The historical markdown narrative is preserved in a resizable bottom pane (default 65:35 split) / 主线追踪标签从静态 markdown 升级为**实时分支状态机面板**。今日 `market-research.md` 的 `thread_scenario_tree` 被解析为分支行（A 乐观 / B 基准 / C 悲观），每行带进度条显示龙头实时价距该分支触发价的距离；当前匹配的分支高亮显示；若龙头跌穿 `out_of_scope_threshold` 上下沿，顶部出现"agent 需重审主线"红色横幅。原 markdown 长文在可调整的下方面板中保留（默认 65:35 分割）
+- New balloon notifications for thread-level state changes: `THREAD_BRANCH_FLIP` (when the active branch transitions, e.g. B 横盘 → A 主升) and `THREAD_OUT_OF_SCOPE` (when leader exits all branches). Throttled per-day per-kind so a price oscillating around a threshold doesn't spam / 新增两个主线级气泡通知：`THREAD_BRANCH_FLIP`（活跃分支切换，如 B 横盘 → A 主升）和 `THREAD_OUT_OF_SCOPE`（龙头脱离所有预案）。按"每日 × 每类型 × 每标的"节流，价格在阈值附近震荡不会刷屏
+
 ## 1.22.0
 
 ### ✨ New Features / 新功能

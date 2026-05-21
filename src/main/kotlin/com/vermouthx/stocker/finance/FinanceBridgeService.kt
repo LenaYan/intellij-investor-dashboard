@@ -78,6 +78,9 @@ class FinanceBridgeService : Disposable {
 
     fun watchlistEntry(code: String?): WatchlistEntry? = state.watchlistEntry(code)
 
+    /** Project-scoped notifier; null when the bridge hasn't been started for any project. */
+    internal fun getNotifier(): FinanceNotifier? = notifier
+
     /**
      * Group watchlist symbols into the four Stocker market buckets so [StockerApp] can
      * fold them into the per-market HTTP fetch (no duplicate requests for codes that

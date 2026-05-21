@@ -47,17 +47,23 @@ object StockerNotification {
                 <p style="${Styles.PARAGRAPH}">🎉 <strong>欢迎使用 Stocker v${v}！本次更新内容：</strong></p>
                 <h4 style="${Styles.HEADING}">✨ v${v} 新功能</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>新增"盯盘"标签</strong>
+                    <li style="${Styles.LIST_ITEM}">✨ <strong>主线追踪标签升级为分支预案状态机</strong>
                         <ul style="${Styles.SUB_LIST}">
-                            <li>在 CN / HK / US / Crypto 旁新增专用 tab，只读展示 <code>~/Claude/finance/watchlist.json</code> 里的全部标的（跨市场合并）</li>
-                            <li>配合"距阈值"列实时高亮 agent 触发价/失效价的接近程度</li>
-                            <li>watchlist.json 改动时自动刷新（file watcher）</li>
-                            <li>行情拉取去重，不增加额外网络请求</li>
+                            <li>解析今日 market-research.md 的 <code>thread_scenario_tree</code>，分支 A / B / C 全部可视化</li>
+                            <li>每个分支带进度条，实时显示龙头价格距离触发条件的远近</li>
+                            <li>当前匹配的分支高亮显示；龙头跌出预案区时顶部出现红色 banner</li>
+                            <li>原 markdown 长文在可调整的下方面板里保留（65:35 分割）</li>
+                        </ul>
+                    </li>
+                    <li style="${Styles.LIST_ITEM}">🔔 <strong>新增两个主线级通知</strong>
+                        <ul style="${Styles.SUB_LIST}">
+                            <li><code>THREAD_BRANCH_FLIP</code>：活跃分支切换（B 横盘 → A 主升 等）</li>
+                            <li><code>THREAD_OUT_OF_SCOPE</code>：龙头脱离所有预案（agent 需重审）</li>
                         </ul>
                     </li>
                 </ul>
                 <div style="${Styles.INFO_BOX}">
-                    <p style="margin: 0; font-size: 12px;">💡 <strong>说明：</strong>需要 <strong>设置 → 工具 → Stocker → Finance bridge</strong> 已启用，并且 <code>~/Claude/finance/watchlist.json</code> 存在。</p>
+                    <p style="margin: 0; font-size: 12px;">💡 <strong>说明：</strong>需要今日 market-research 报告里包含 v2.1 schema 的 <code>thread_scenario_tree</code> 字段；否则面板显示"暂无数据"。</p>
                 </div>
                 <p style="${Styles.SMALL_TEXT}">💖 如果您觉得这个插件有帮助，请考虑点击下方的 <strong>Donate</strong> 按钮以支持开发。谢谢！📈</p>
             </div>
@@ -66,17 +72,23 @@ object StockerNotification {
                 <p style="${Styles.PARAGRAPH}">🎉 <strong>Welcome to Stocker v${v}! Here's what's new in this release:</strong></p>
                 <h4 style="${Styles.HEADING}">✨ New in v${v}</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>Watchlist tab</strong>
+                    <li style="${Styles.LIST_ITEM}">✨ <strong>Thread Tracker is now a live scenario state machine</strong>
                         <ul style="${Styles.SUB_LIST}">
-                            <li>A dedicated read-only tab next to CN / HK / US / Crypto that consolidates every symbol in <code>~/Claude/finance/watchlist.json</code> across markets</li>
-                            <li>Pairs with the Trigger Distance column for live proximity highlights against agent trigger / invalidation prices</li>
-                            <li>Auto-refreshes when watchlist.json changes (file watcher)</li>
-                            <li>Folds watchlist codes into the existing per-market fetch (deduped) — no extra HTTP traffic</li>
+                            <li>Parses today's market-research <code>thread_scenario_tree</code> and renders each branch (A / B / C) visually</li>
+                            <li>Each branch has a progress bar showing the leader's live distance to its trigger</li>
+                            <li>The currently-matching branch is highlighted; out-of-scope breach raises a red banner</li>
+                            <li>The original markdown narrative is preserved in a resizable lower pane (65:35 split)</li>
+                        </ul>
+                    </li>
+                    <li style="${Styles.LIST_ITEM}">🔔 <strong>Two new thread-level notifications</strong>
+                        <ul style="${Styles.SUB_LIST}">
+                            <li><code>THREAD_BRANCH_FLIP</code>: the active branch transitioned (e.g. B → A)</li>
+                            <li><code>THREAD_OUT_OF_SCOPE</code>: leader exited every branch (agent needs to re-review)</li>
                         </ul>
                     </li>
                 </ul>
                 <div style="${Styles.INFO_BOX}">
-                    <p style="margin: 0; font-size: 12px;">💡 <strong>Tip:</strong> Requires <strong>Settings → Tools → Stocker → Finance bridge</strong> enabled and <code>~/Claude/finance/watchlist.json</code> present.</p>
+                    <p style="margin: 0; font-size: 12px;">💡 <strong>Tip:</strong> Requires today's market-research.md to include a v2.1 schema <code>thread_scenario_tree</code> block; otherwise the panel shows an empty state.</p>
                 </div>
                 <p style="${Styles.SMALL_TEXT}">💖 If you find this plugin helpful, please consider clicking the <strong>Donate</strong> button below to support its development. Thank you! 📈</p>
             </div>

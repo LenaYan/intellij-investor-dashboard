@@ -32,6 +32,8 @@ internal class FinanceNotifier(
         INVALIDATION_HIT("触发证伪", "Invalidation hit", NotificationType.ERROR),
         ENTRY_TRIGGER("entry-timing 买点", "Entry trigger", NotificationType.WARNING),
         ENTRY_INVALIDATION("entry-timing 失效", "Entry invalidation", NotificationType.ERROR),
+        THREAD_BRANCH_FLIP("主线分支切换", "Scenario branch flip", NotificationType.WARNING),
+        THREAD_OUT_OF_SCOPE("主线超预案", "Scenario out of scope", NotificationType.ERROR),
     }
 
     fun fire(symbol: String, name: String?, kind: Kind, currentPrice: Double, percent: Double, detail: String?) {
