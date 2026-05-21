@@ -67,6 +67,7 @@ public class StockerTableView implements Disposable {
     private final StockerDefaultTableCellRender netProfitRenderer = new NetProfitCellRenderer();
     private final StockerSparklineCellRenderer sparklineRenderer = new StockerSparklineCellRenderer();
     private final StockerDefaultTableCellRender healthRenderer = new HealthCellRenderer();
+    private final StockerDefaultTableCellRender distanceRenderer = new DistanceCellRenderer();
 
     // Sorting state
     private StockerTableHeaderRender headerRenderer;
@@ -294,6 +295,7 @@ public class StockerTableView implements Disposable {
     private static final String netProfitColumn = StockerTableColumn.NET_PROFIT.name();
     private static final String sparklineColumn = StockerTableColumn.SPARKLINE.name();
     private static final String healthColumn = StockerTableColumn.HEALTH.name();
+    private static final String distanceColumn = StockerTableColumn.DISTANCE.name();
     private static final List<String> allColumnNames;
 
     static {
@@ -329,7 +331,7 @@ public class StockerTableView implements Disposable {
             }
         });
 
-        tbModel.setColumnIdentifiers(new String[]{codeColumn, nameColumn, currentColumn, openingColumn, closeColumn, lowColumn, highColumn, changeColumn, percentColumn, costPriceColumn, holdingsColumn, netProfitColumn, sparklineColumn, healthColumn});
+        tbModel.setColumnIdentifiers(new String[]{codeColumn, nameColumn, currentColumn, openingColumn, closeColumn, lowColumn, highColumn, changeColumn, percentColumn, costPriceColumn, holdingsColumn, netProfitColumn, sparklineColumn, healthColumn, distanceColumn});
 
         tbBody.setModel(tbModel);
         tbBody.setAutoCreateColumnsFromModel(false);
@@ -789,6 +791,12 @@ public class StockerTableView implements Disposable {
             health.setMinWidth(36);
             health.setMaxWidth(72);
         }
+        TableColumn distance = getColumnIfPresent(distanceColumn);
+        if (distance != null) {
+            distance.setCellRenderer(distanceRenderer);
+            distance.setPreferredWidth(180);
+            distance.setMinWidth(110);
+        }
     }
 
     private TableColumn getColumnIfPresent(String identifier) {
@@ -942,8 +950,8 @@ public class StockerTableView implements Disposable {
             return;
         }
 
-        // Skip sorting for non-sortable columns (sparkline, health)
-        if (columnName.equals(sparklineColumn) || columnName.equals(healthColumn)) {
+        // Skip sorting for non-sortable columns (sparkline, health, distance)
+        if (columnName.equals(sparklineColumn) || columnName.equals(healthColumn) || columnName.equals(distanceColumn)) {
             return;
         }
 
@@ -1285,6 +1293,85 @@ public class StockerTableView implements Disposable {
                     setForeground(gray);
                     setText("●");
                     break;
+            }
+            return component;
+        }
+    }
+
+    /**
+     * Renderer for the DISTANCE column. Cell value format: "<level>|<text>|<tooltip>",
+     * produced by {@link com.vermouthx.stocker.finance.FinanceDistanceAnnotator}.
+     *
+     * Level mapping:
+     *   A (ALERT)  red background  → invalidation breached
+     *   W (WARN)   amber background → inside trigger ±1.5% OR within +1.5% of invalidation
+     *   I (INFO)   default bg, plain text → within ±5% of trigger
+     *   N (NONE)   muted gray text → passive distance (>5% away)
+     *
+     * WARN/ALERT colors only apply when the corresponding setting is enabled — turning
+     * `financeNotifyTriggers` / `financeNotifyEntryTiming` off downgrades all WARN/ALERT
+     * to neutral display (still shows the text, just without urgent color).
+     */
+    private class DistanceCellRenderer extends StockerDefaultTableCellRender {
+        private final Color alertBg = new JBColor(new Color(0xC62828), new Color(0xB71C1C));
+        private final Color alertFg = new JBColor(Color.WHITE, Color.WHITE);
+        private final Color warnBg  = new JBColor(new Color(0xFFF1B8), new Color(0x5A4B1A));
+        private final Color warnFg  = new JBColor(new Color(0x6B4E00), new Color(0xFFD54F));
+        private final Color infoFg  = new JBColor(new Color(0x37474F), new Color(0xCFD8DC));
+        private final Color muted   = JBColor.GRAY;
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            setHorizontalAlignment(DefaultTableCellRenderer.CENTER);
+            // Reset background — super-class may have set selection or zebra background
+            if (!isSelected) {
+                setBackground(table.getBackground());
+                setOpaque(false);
+            }
+            if (value == null) {
+                setText("");
+                setToolTipText(null);
+                return component;
+            }
+            String s = value.toString();
+            String level = "N";
+            String text = s;
+            String tip = null;
+            int sep1 = s.indexOf('|');
+            if (sep1 >= 0) {
+                level = s.substring(0, sep1);
+                String rest = s.substring(sep1 + 1);
+                int sep2 = rest.indexOf('|');
+                if (sep2 >= 0) {
+                    text = rest.substring(0, sep2);
+                    tip = rest.substring(sep2 + 1);
+                    if (tip.isEmpty()) tip = null;
+                } else {
+                    text = rest;
+                }
+            }
+            setText(text);
+            setToolTipText(tip);
+            if (isSelected) return component;
+
+            com.vermouthx.stocker.settings.StockerSetting setting = com.vermouthx.stocker.settings.StockerSetting.Companion.getInstance();
+            // Determine if WARN/ALERT colors should be suppressed (user disabled both flags
+            // → user explicitly opted out of urgent visuals; still show plain text).
+            boolean suppressUrgent = !setting.getFinanceNotifyTriggers() && !setting.getFinanceNotifyEntryTiming();
+
+            if (!suppressUrgent && "A".equals(level)) {
+                setBackground(alertBg);
+                setForeground(alertFg);
+                setOpaque(true);
+            } else if (!suppressUrgent && "W".equals(level)) {
+                setBackground(warnBg);
+                setForeground(warnFg);
+                setOpaque(true);
+            } else if ("I".equals(level)) {
+                setForeground(infoFg);
+            } else {
+                setForeground(muted);
             }
             return component;
         }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.21.0
+
+### ✨ New Features / 新功能
+
+- Added a Trigger Distance column that displays the live distance between current price and finance/ watchlist or entry-timing trigger / invalidation prices, with amber background when entering the trigger ±1.5% zone and red background when invalidation is breached / 新增"距阈值"列，实时显示当前价距 finance/ watchlist 与 entry-timing trigger / invalidation 价位的距离；进入 trigger ±1.5% 触发区变琥珀色、跌破 invalidation 变红色背景
+
+### 🔧 Behavior Change / 行为变更
+
+- Watchlist trigger / invalidation hits and entry-timing buy-point hits no longer surface as IDE balloon popups — they appear inline in the new Trigger Distance column instead. Market anomaly (±5% / ±7%) and A-share limit-up / limit-down notifications still fire as before / watchlist trigger / invalidation 命中、entry-timing 买点命中不再弹 IDE 气泡通知，改为在"距阈值"列内联展示。市场异动（±5% / ±7%）和 A 股涨停跌停通知保持不变
+
 ## 1.20.1
 
 ### 🐛 Bug Fixes / 错误修复

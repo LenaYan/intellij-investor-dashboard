@@ -3,6 +3,7 @@ package com.vermouthx.stocker.listeners;
 import com.vermouthx.stocker.entities.StockerQuote;
 import com.vermouthx.stocker.finance.EntryTimingRecommendation;
 import com.vermouthx.stocker.finance.FinanceBridgeService;
+import com.vermouthx.stocker.finance.FinanceDistanceAnnotator;
 import com.vermouthx.stocker.finance.FinanceEventCalendar;
 import com.vermouthx.stocker.finance.FinanceState;
 import com.vermouthx.stocker.finance.WatchlistEntry;
@@ -234,6 +235,21 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
                             tableModel.fireTableCellUpdated(rowIndex, 13);
                         }
                     }
+                    // Column 14: DISTANCE — live trigger/invalidation distance, replaces popups
+                    if (tableModel.getColumnCount() > 14) {
+                        String distVal = FinanceDistanceAnnotator.INSTANCE.encode(
+                            FinanceDistanceAnnotator.INSTANCE.annotate(quote.getCode(), quote.getCurrent()));
+                        Object existing = tableModel.getValueAt(rowIndex, 14);
+                        if (distVal == null) {
+                            if (existing != null) {
+                                tableModel.setValueAt(null, rowIndex, 14);
+                                tableModel.fireTableCellUpdated(rowIndex, 14);
+                            }
+                        } else if (!distVal.equals(existing)) {
+                            tableModel.setValueAt(distVal, rowIndex, 14);
+                            tableModel.fireTableCellUpdated(rowIndex, 14);
+                        }
+                    }
                 } else {
                     if (quotes.size() <= size) {
                         Double costPrice = setting.getCostPrice(quote.getCode());
@@ -252,7 +268,9 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
                             formatHoldings(holdings),
                             formatNetProfit(quote, costPrice, holdings),
                             null, // sparkline data populated by intraday fetch
-                            formatHealthBadge(quote.getCode()) // finance/ bridge health
+                            formatHealthBadge(quote.getCode()), // finance/ bridge health
+                            FinanceDistanceAnnotator.INSTANCE.encode(
+                                FinanceDistanceAnnotator.INSTANCE.annotate(quote.getCode(), quote.getCurrent()))
                         });
                         // Clear sort state when new rows are added
                         myTableView.clearSortState();
