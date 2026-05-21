@@ -24,21 +24,20 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
     private var selectedCryptoProvider: StockerQuoteProvider = setting.cryptoQuoteProvider
     private var displayNameWithPinyin: Boolean = setting.displayNameWithPinyin
     private var languageOverride: String = setting.languageOverride
-    private var showSymbol: Boolean = setting.isTableColumnVisible(StockerTableColumn.SYMBOL)
-    private var showName: Boolean = setting.isTableColumnVisible(StockerTableColumn.NAME)
-    private var showCurrent: Boolean = setting.isTableColumnVisible(StockerTableColumn.CURRENT)
-    private var showOpening: Boolean = setting.isTableColumnVisible(StockerTableColumn.OPENING)
-    private var showClose: Boolean = setting.isTableColumnVisible(StockerTableColumn.CLOSE)
-    private var showLow: Boolean = setting.isTableColumnVisible(StockerTableColumn.LOW)
-    private var showHigh: Boolean = setting.isTableColumnVisible(StockerTableColumn.HIGH)
-    private var showChange: Boolean = setting.isTableColumnVisible(StockerTableColumn.CHANGE)
-    private var showChangePercent: Boolean = setting.isTableColumnVisible(StockerTableColumn.CHANGE_PERCENT)
-    private var showCostPrice: Boolean = setting.isTableColumnVisible(StockerTableColumn.COST_PRICE)
-    private var showHoldings: Boolean = setting.isTableColumnVisible(StockerTableColumn.HOLDINGS)
-    private var showNetProfit: Boolean = setting.isTableColumnVisible(StockerTableColumn.NET_PROFIT)
-    private var showSparkline: Boolean = setting.isTableColumnVisible(StockerTableColumn.SPARKLINE)
-    private var showHealth: Boolean = setting.isTableColumnVisible(StockerTableColumn.HEALTH)
-    private var showDistance: Boolean = setting.isTableColumnVisible(StockerTableColumn.DISTANCE)
+
+    /**
+     * Per-column visibility state. Driven by [StockerTableColumn.entries] so any new
+     * enum value automatically appears in the settings panel — no need to register
+     * a checkbox field by hand. Insertion order = enum order, preserved via LinkedHashMap.
+     */
+    private val columnVisibility: MutableMap<StockerTableColumn, Boolean> =
+        linkedMapOf<StockerTableColumn, Boolean>().apply {
+            StockerTableColumn.entries.forEach { col -> this[col] = setting.isTableColumnVisible(col) }
+        }
+
+    /** Lookup of constructed JCheckBox by column — populated during panel build, used by [handleColumnToggle]. */
+    private val columnCheckBoxes: MutableMap<StockerTableColumn, JCheckBox> = linkedMapOf()
+    private var columnWarningLabel: JLabel? = null
 
     // Finance bridge settings (mirrored on apply)
     private var financeBridgeEnabled: Boolean = setting.financeBridgeEnabled
@@ -51,20 +50,6 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
     private var financeShowEntryTimingTab: Boolean = setting.financeShowEntryTimingTab
     private var financeShowCalibrationTab: Boolean = setting.financeShowCalibrationTab
     private var financeHighlightThreadChange: Boolean = setting.financeHighlightThreadChange
-
-    private var symbolCheckBox: JCheckBox? = null
-    private var nameCheckBox: JCheckBox? = null
-    private var currentCheckBox: JCheckBox? = null
-    private var openingCheckBox: JCheckBox? = null
-    private var closeCheckBox: JCheckBox? = null
-    private var lowCheckBox: JCheckBox? = null
-    private var highCheckBox: JCheckBox? = null
-    private var changeCheckBox: JCheckBox? = null
-    private var changePercentCheckBox: JCheckBox? = null
-    private var costPriceCheckBox: JCheckBox? = null
-    private var holdingsCheckBox: JCheckBox? = null
-    private var netProfitCheckBox: JCheckBox? = null
-    private var columnWarningLabel: JLabel? = null
 
     companion object {
         private val LANGUAGE_CODES = listOf("", "en", "zh_CN")
@@ -80,6 +65,10 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
     override fun createPanel(): DialogPanel {
         val providerRenderer = SimpleListCellRenderer.create<StockerQuoteProvider>("") { it.title }
         val languageRenderer = SimpleListCellRenderer.create<String>("") { languageDisplayName(it) }
+
+        // Reset the checkbox lookup on each panel rebuild so we don't keep references
+        // to stale Swing components from a previously disposed panel.
+        columnCheckBoxes.clear()
 
         return panel {
             group(StockerBundle.message("settings.group.general")) {
@@ -156,122 +145,22 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 }.layout(RowLayout.LABEL_ALIGNED)
 
                 indent {
-                    row {
-                        symbolCheckBox = checkBox(StockerTableColumn.SYMBOL.title)
-                            .bindSelected(::showSymbol.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        nameCheckBox = checkBox(StockerTableColumn.NAME.title)
-                            .bindSelected(::showName.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        currentCheckBox = checkBox(StockerTableColumn.CURRENT.title)
-                            .bindSelected(::showCurrent.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        openingCheckBox = checkBox(StockerTableColumn.OPENING.title)
-                            .bindSelected(::showOpening.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        closeCheckBox = checkBox(StockerTableColumn.CLOSE.title)
-                            .bindSelected(::showClose.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        lowCheckBox = checkBox(StockerTableColumn.LOW.title)
-                            .bindSelected(::showLow.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        highCheckBox = checkBox(StockerTableColumn.HIGH.title)
-                            .bindSelected(::showHigh.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        changeCheckBox = checkBox(StockerTableColumn.CHANGE.title)
-                            .bindSelected(::showChange.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        changePercentCheckBox = checkBox(StockerTableColumn.CHANGE_PERCENT.title)
-                            .bindSelected(::showChangePercent.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        costPriceCheckBox = checkBox(StockerTableColumn.COST_PRICE.title)
-                            .bindSelected(::showCostPrice.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        holdingsCheckBox = checkBox(StockerTableColumn.HOLDINGS.title)
-                            .bindSelected(::showHoldings.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        netProfitCheckBox = checkBox(StockerTableColumn.NET_PROFIT.title)
-                            .bindSelected(::showNetProfit.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                            .component
-                    }
-                    row {
-                        checkBox(StockerTableColumn.SPARKLINE.title)
-                            .bindSelected(::showSparkline.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                    }
-                    row {
-                        checkBox(StockerTableColumn.HEALTH.title)
-                            .bindSelected(::showHealth.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
-                    }
-                    row {
-                        checkBox(StockerTableColumn.DISTANCE.title)
-                            .bindSelected(::showDistance.toMutableProperty())
-                            .applyToComponent {
-                                addItemListener { handleColumnToggle(this) }
-                            }
+                    // One checkbox per enum value, in declaration order.
+                    // Adding a new column to StockerTableColumn automatically adds a
+                    // checkbox here — no manual registration required.
+                    StockerTableColumn.entries.forEach { col ->
+                        row {
+                            val cb = checkBox(col.title)
+                                .bindSelected(
+                                    { columnVisibility[col] ?: false },
+                                    { columnVisibility[col] = it }
+                                )
+                                .applyToComponent {
+                                    addItemListener { handleColumnToggle(this) }
+                                }
+                                .component
+                            columnCheckBoxes[col] = cb
+                        }
                     }
                     row {
                         columnWarningLabel = label(StockerBundle.message("settings.table.columns.warning"))
@@ -415,21 +304,9 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 colorPattern = setting.quoteColorPattern
                 displayNameWithPinyin = setting.displayNameWithPinyin
                 languageOverride = setting.languageOverride
-                showSymbol = setting.isTableColumnVisible(StockerTableColumn.SYMBOL)
-                showName = setting.isTableColumnVisible(StockerTableColumn.NAME)
-                showCurrent = setting.isTableColumnVisible(StockerTableColumn.CURRENT)
-                showOpening = setting.isTableColumnVisible(StockerTableColumn.OPENING)
-                showClose = setting.isTableColumnVisible(StockerTableColumn.CLOSE)
-                showLow = setting.isTableColumnVisible(StockerTableColumn.LOW)
-                showHigh = setting.isTableColumnVisible(StockerTableColumn.HIGH)
-                showChange = setting.isTableColumnVisible(StockerTableColumn.CHANGE)
-                showChangePercent = setting.isTableColumnVisible(StockerTableColumn.CHANGE_PERCENT)
-                showCostPrice = setting.isTableColumnVisible(StockerTableColumn.COST_PRICE)
-                showHoldings = setting.isTableColumnVisible(StockerTableColumn.HOLDINGS)
-                showNetProfit = setting.isTableColumnVisible(StockerTableColumn.NET_PROFIT)
-                showSparkline = setting.isTableColumnVisible(StockerTableColumn.SPARKLINE)
-                showHealth = setting.isTableColumnVisible(StockerTableColumn.HEALTH)
-                showDistance = setting.isTableColumnVisible(StockerTableColumn.DISTANCE)
+                StockerTableColumn.entries.forEach { col ->
+                    columnVisibility[col] = setting.isTableColumnVisible(col)
+                }
                 financeBridgeEnabled = setting.financeBridgeEnabled
                 financeBaseDir = setting.financeBaseDir
                 anomalyThresholdPct = setting.anomalyThresholdPct
@@ -445,43 +322,18 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
         }
     }
 
-    private fun buildVisibleColumns(): MutableList<String> {
-        val visibleColumns = mutableListOf<String>()
-        if (showSymbol) visibleColumns.add(StockerTableColumn.SYMBOL.name)
-        if (showName) visibleColumns.add(StockerTableColumn.NAME.name)
-        if (showCurrent) visibleColumns.add(StockerTableColumn.CURRENT.name)
-        if (showOpening) visibleColumns.add(StockerTableColumn.OPENING.name)
-        if (showClose) visibleColumns.add(StockerTableColumn.CLOSE.name)
-        if (showLow) visibleColumns.add(StockerTableColumn.LOW.name)
-        if (showHigh) visibleColumns.add(StockerTableColumn.HIGH.name)
-        if (showChange) visibleColumns.add(StockerTableColumn.CHANGE.name)
-        if (showChangePercent) visibleColumns.add(StockerTableColumn.CHANGE_PERCENT.name)
-        if (showCostPrice) visibleColumns.add(StockerTableColumn.COST_PRICE.name)
-        if (showHoldings) visibleColumns.add(StockerTableColumn.HOLDINGS.name)
-        if (showNetProfit) visibleColumns.add(StockerTableColumn.NET_PROFIT.name)
-        if (showSparkline) visibleColumns.add(StockerTableColumn.SPARKLINE.name)
-        if (showHealth) visibleColumns.add(StockerTableColumn.HEALTH.name)
-        if (showDistance) visibleColumns.add(StockerTableColumn.DISTANCE.name)
-        return visibleColumns
-    }
+    private fun buildVisibleColumns(): MutableList<String> =
+        StockerTableColumn.entries
+            .filter { columnVisibility[it] == true }
+            .map { it.name }
+            .toMutableList()
 
+    /**
+     * Enforces "at least one column visible". If the user is about to uncheck the last
+     * remaining column, we force it back on and show a warning label.
+     */
     private fun handleColumnToggle(changed: JCheckBox) {
-        val allCheckboxes = listOfNotNull(
-            symbolCheckBox,
-            nameCheckBox,
-            currentCheckBox,
-            openingCheckBox,
-            closeCheckBox,
-            lowCheckBox,
-            highCheckBox,
-            changeCheckBox,
-            changePercentCheckBox,
-            costPriceCheckBox,
-            holdingsCheckBox,
-            netProfitCheckBox
-        )
-        val selectedCount = allCheckboxes.count { it.isSelected }
-
+        val selectedCount = columnCheckBoxes.values.count { it.isSelected }
         if (selectedCount == 0) {
             changed.isSelected = true
             columnWarningLabel?.isVisible = true
