@@ -5,11 +5,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Disposer
-import com.intellij.util.messages.MessageBusConnection
-import com.vermouthx.stocker.entities.StockerQuote
 import com.vermouthx.stocker.enums.StockerMarketType
-import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier
 import com.vermouthx.stocker.settings.StockerSetting
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -23,7 +19,6 @@ import javax.swing.SwingUtilities
  * Responsibilities:
  *   - Resolve the configured finance/ directory (with sensible default ~/Claude/finance).
  *   - Spin up [FinanceFileWatcher] when enabled.
- *   - Subscribe to STOCK_ALL_QUOTE_UPDATE_TOPIC and run [FinanceSignalDetector] over each batch.
  *   - Expose [state] for UI components (e.g. the Health cell renderer).
  *
  * Auto-disable rule: if the configured finance/ directory does not exist, we silently
@@ -37,10 +32,8 @@ class FinanceBridgeService : Disposable {
 
     private val started = AtomicBoolean(false)
     private var watcher: FinanceFileWatcher? = null
-    private var detector: FinanceSignalDetector? = null
     private var notifier: FinanceNotifier? = null
     private var reportNotifier: FinanceReportNotifier? = null
-    private var messageBusConnection: MessageBusConnection? = null
     private val refreshListeners = CopyOnWriteArrayList<() -> Unit>()
 
     fun snapshot(): FinanceState.Snapshot = state.get()
@@ -139,22 +132,12 @@ class FinanceBridgeService : Disposable {
             return
         }
 
-        // 1. Notifier + detector (scoped to this project so notifications land in the right window)
+        // 1. Notifier (scoped to this project so scenario-state notifications land in the
+        //    right window). Anomaly / limit-hit popups (±5/±7/涨跌停) used to fire from a
+        //    FinanceSignalDetector here; they were removed — those signals are surfaced
+        //    inline in the DISTANCE column / scenario panel instead.
         val n = FinanceNotifier(project)
         notifier = n
-        detector = FinanceSignalDetector(
-            notifier = n,
-            state = state,
-            config = {
-                FinanceSignalDetector.Config(
-                    anomalyPct = setting.anomalyThresholdPct,
-                    strongAnomalyPct = setting.anomalyStrongThresholdPct,
-                    notifyAnomaly = setting.financeNotifyAnomaly,
-                    notifyTriggers = setting.financeNotifyTriggers,
-                    notifyEntryTiming = setting.financeNotifyEntryTiming,
-                )
-            }
-        )
 
         // 2.b Report-event notifier (overnight-brief / longhubang first-seen toasts)
         val rn = FinanceReportNotifier(project, state)
@@ -171,23 +154,6 @@ class FinanceBridgeService : Disposable {
         // Fire once after the initial read so panels render the latest data.
         rn.onReload(dir)
         fireRefresh()
-
-        // 3. Hook into quote message bus (application-level)
-        val conn = ApplicationManager.getApplication().messageBus.connect(this)
-        messageBusConnection = conn
-        conn.subscribe(
-            StockerQuoteUpdateNotifier.STOCK_ALL_QUOTE_UPDATE_TOPIC,
-            object : StockerQuoteUpdateNotifier {
-                override fun syncQuotes(quotes: List<StockerQuote>, size: Int) {
-                    if (quotes.isEmpty()) return
-                    detector?.onQuotes(quotes)
-                }
-
-                override fun syncIndices(indices: List<StockerQuote>) {
-                    // not interested in indices for now
-                }
-            }
-        )
 
         log.info("FinanceBridge started: dir=$dir")
     }
@@ -206,9 +172,6 @@ class FinanceBridgeService : Disposable {
     override fun dispose() {
         watcher?.stop()
         watcher = null
-        messageBusConnection?.disconnect()
-        messageBusConnection = null
-        detector = null
         notifier?.reset()
         notifier = null
         reportNotifier?.reset()

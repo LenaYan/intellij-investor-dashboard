@@ -42,9 +42,6 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
     // Finance bridge settings (mirrored on apply)
     private var financeBridgeEnabled: Boolean = setting.financeBridgeEnabled
     private var financeBaseDir: String = setting.financeBaseDir
-    private var anomalyThresholdPct: Double = setting.anomalyThresholdPct
-    private var anomalyStrongThresholdPct: Double = setting.anomalyStrongThresholdPct
-    private var financeNotifyAnomaly: Boolean = setting.financeNotifyAnomaly
     private var financeNotifyTriggers: Boolean = setting.financeNotifyTriggers
     private var financeNotifyEntryTiming: Boolean = setting.financeNotifyEntryTiming
     private var financeShowEntryTimingTab: Boolean = setting.financeShowEntryTimingTab
@@ -189,32 +186,6 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 }.layout(RowLayout.LABEL_ALIGNED)
 
                 row {
-                    label(StockerBundle.message("settings.finance.anomaly.threshold")).widthGroup("labels")
-                    textField()
-                        .bindText(
-                            { "%.1f".format(anomalyThresholdPct) },
-                            { anomalyThresholdPct = it.toDoubleOrNull() ?: anomalyThresholdPct }
-                        )
-                        .widthGroup("comboboxes")
-                        .comment(StockerBundle.message("settings.finance.anomaly.threshold.comment"))
-                }.layout(RowLayout.LABEL_ALIGNED)
-
-                row {
-                    label(StockerBundle.message("settings.finance.anomaly.strong.threshold")).widthGroup("labels")
-                    textField()
-                        .bindText(
-                            { "%.1f".format(anomalyStrongThresholdPct) },
-                            { anomalyStrongThresholdPct = it.toDoubleOrNull() ?: anomalyStrongThresholdPct }
-                        )
-                        .widthGroup("comboboxes")
-                        .comment(StockerBundle.message("settings.finance.anomaly.strong.threshold.comment"))
-                }.layout(RowLayout.LABEL_ALIGNED)
-
-                row {
-                    checkBox(StockerBundle.message("settings.finance.notify.anomaly"))
-                        .bindSelected(::financeNotifyAnomaly.toMutableProperty())
-                }
-                row {
                     checkBox(StockerBundle.message("settings.finance.notify.triggers"))
                         .bindSelected(::financeNotifyTriggers.toMutableProperty())
                 }
@@ -258,9 +229,6 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
 
                 setting.financeBridgeEnabled = financeBridgeEnabled
                 setting.financeBaseDir = financeBaseDir
-                setting.anomalyThresholdPct = anomalyThresholdPct
-                setting.anomalyStrongThresholdPct = anomalyStrongThresholdPct
-                setting.financeNotifyAnomaly = financeNotifyAnomaly
                 setting.financeNotifyTriggers = financeNotifyTriggers
                 setting.financeNotifyEntryTiming = financeNotifyEntryTiming
                 setting.financeShowEntryTimingTab = financeShowEntryTimingTab
@@ -289,9 +257,6 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                         buildVisibleColumns() != setting.visibleTableColumns ||
                         financeBridgeEnabled != setting.financeBridgeEnabled ||
                         financeBaseDir != setting.financeBaseDir ||
-                        anomalyThresholdPct != setting.anomalyThresholdPct ||
-                        anomalyStrongThresholdPct != setting.anomalyStrongThresholdPct ||
-                        financeNotifyAnomaly != setting.financeNotifyAnomaly ||
                         financeNotifyTriggers != setting.financeNotifyTriggers ||
                         financeNotifyEntryTiming != setting.financeNotifyEntryTiming ||
                         financeShowEntryTimingTab != setting.financeShowEntryTimingTab ||
@@ -309,9 +274,6 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 }
                 financeBridgeEnabled = setting.financeBridgeEnabled
                 financeBaseDir = setting.financeBaseDir
-                anomalyThresholdPct = setting.anomalyThresholdPct
-                anomalyStrongThresholdPct = setting.anomalyStrongThresholdPct
-                financeNotifyAnomaly = setting.financeNotifyAnomaly
                 financeNotifyTriggers = setting.financeNotifyTriggers
                 financeNotifyEntryTiming = setting.financeNotifyEntryTiming
                 financeShowEntryTimingTab = setting.financeShowEntryTimingTab

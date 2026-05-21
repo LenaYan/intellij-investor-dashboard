@@ -252,25 +252,16 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
             BorderFactory.createEmptyBorder(8, 8, 8, 8)
         ))
         
-        // ToolbarDecorator with remove action for batch delete (supports multi-select)
+        // ToolbarDecorator with remove action for batch delete (supports multi-select).
+        // No confirmation prompt — single/multi-select delete commits immediately; only
+        // "Delete All" (below) keeps a confirmation since it's an unscoped wipe.
         val decorator = ToolbarDecorator.createDecorator(list)
             .setRemoveAction {
                 val selectedIndices = list.selectedIndices
                 if (selectedIndices.isNotEmpty()) {
-                    val count = selectedIndices.size
-                    val confirmMsg = if (count == 1) {
-                        "Remove \"${listModel.getElementAt(selectedIndices[0]).code}\"?"
-                    } else {
-                        "Remove $count selected item(s)?"
-                    }
-                    val result = Messages.showYesNoDialog(
-                        pane, confirmMsg, "Confirm Delete", Messages.getQuestionIcon()
-                    )
-                    if (result == Messages.YES) {
-                        // Remove from end to start to preserve indices
-                        for (i in selectedIndices.reversed()) {
-                            listModel.removeElementAt(i)
-                        }
+                    // Remove from end to start to preserve indices
+                    for (i in selectedIndices.reversed()) {
+                        listModel.removeElementAt(i)
                     }
                 }
             }

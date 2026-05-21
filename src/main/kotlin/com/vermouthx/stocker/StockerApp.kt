@@ -132,10 +132,13 @@ class StockerApp {
             cryptoPublisher.syncIndices(cryptoIndices)
             
             // Publish to "all" topic
+            // Cap = allStockQuotes.size (favourites ∪ watchlist) so the addRow guard in
+            // StockerQuoteUpdateListener (`quotes.size() <= size`) doesn't reject every
+            // row when the watchlist adds codes that aren't in the per-market favourites.
             val allStockQuotes = listOf(aShareQuotes, hkStocksQuotes, usStocksQuotes, cryptoQuotes).flatten()
             val allStockIndices = listOf(aShareIndices, hkStocksIndices, usStocksIndices, cryptoIndices).flatten()
             val allPublisher = messageBus.syncPublisher(STOCK_ALL_QUOTE_UPDATE_TOPIC)
-            allPublisher.syncQuotes(allStockQuotes, setting.allStockListSize)
+            allPublisher.syncQuotes(allStockQuotes, allStockQuotes.size)
             allPublisher.syncIndices(allStockIndices)
 
             // Fetch intraday data for sparkline display (favourites + watchlist union)

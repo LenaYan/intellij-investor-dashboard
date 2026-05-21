@@ -145,24 +145,6 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
             log.info("Stocker finance base dir set to $value")
         }
 
-    var anomalyThresholdPct: Double
-        get() = myState.anomalyThresholdPct
-        set(value) {
-            myState.anomalyThresholdPct = value
-        }
-
-    var anomalyStrongThresholdPct: Double
-        get() = myState.anomalyStrongThresholdPct
-        set(value) {
-            myState.anomalyStrongThresholdPct = value
-        }
-
-    var financeNotifyAnomaly: Boolean
-        get() = myState.financeNotifyAnomaly
-        set(value) {
-            myState.financeNotifyAnomaly = value
-        }
-
     var financeNotifyTriggers: Boolean
         get() = myState.financeNotifyTriggers
         set(value) {

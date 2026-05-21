@@ -22,16 +22,10 @@ internal class FinanceNotifier(
     private val groupId = "Stocker"
 
     enum class Kind(val tagZh: String, val tagEn: String, val type: NotificationType) {
-        ANOMALY_UP("放量异动 +", "Up spike", NotificationType.INFORMATION),
-        ANOMALY_DOWN("放量异动 -", "Down spike", NotificationType.WARNING),
-        STRONG_ANOMALY_UP("强异动 +", "Strong up", NotificationType.WARNING),
-        STRONG_ANOMALY_DOWN("强异动 -", "Strong down", NotificationType.WARNING),
-        LIMIT_UP("涨停", "Limit up", NotificationType.WARNING),
-        LIMIT_DOWN("跌停", "Limit down", NotificationType.ERROR),
-        TRIGGER_HIT("触发买点", "Trigger hit", NotificationType.WARNING),
-        INVALIDATION_HIT("触发证伪", "Invalidation hit", NotificationType.ERROR),
-        ENTRY_TRIGGER("entry-timing 买点", "Entry trigger", NotificationType.WARNING),
-        ENTRY_INVALIDATION("entry-timing 失效", "Entry invalidation", NotificationType.ERROR),
+        // Note: ANOMALY_UP/DOWN, STRONG_ANOMALY_UP/DOWN, LIMIT_UP/DOWN — the ±%/涨跌停
+        // popups — were removed; the DISTANCE column carries that signal inline now.
+        // TRIGGER_HIT / INVALIDATION_HIT / ENTRY_TRIGGER / ENTRY_INVALIDATION were
+        // deprecated earlier when the DISTANCE column shipped.
         THREAD_BRANCH_FLIP("主线分支切换", "Scenario branch flip", NotificationType.WARNING),
         THREAD_OUT_OF_SCOPE("主线超预案", "Scenario out of scope", NotificationType.ERROR),
     }

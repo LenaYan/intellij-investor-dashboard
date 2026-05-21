@@ -10,7 +10,6 @@ import com.intellij.util.messages.MessageBusConnection
 import com.vermouthx.stocker.StockerApp
 import com.vermouthx.stocker.StockerAppManager
 import com.vermouthx.stocker.StockerBundle
-import com.vermouthx.stocker.enums.StockerMarketType
 import com.vermouthx.stocker.finance.FinanceBridgeService
 import com.vermouthx.stocker.finance.panels.FinanceToolWindowPanel
 import com.vermouthx.stocker.listeners.StockerQuoteDeleteListener
@@ -26,7 +25,6 @@ class StockerToolWindow : ToolWindowFactory {
     private val messageBus = ApplicationManager.getApplication().messageBus
 
     private lateinit var allView: StockerSimpleToolWindow
-    private lateinit var tabViewMap: Map<StockerMarketType, StockerSimpleToolWindow>
     private lateinit var myApplication: StockerApp
     private var financePanel: FinanceToolWindowPanel? = null
     private var watchlistView: StockerSimpleToolWindow? = null
@@ -35,13 +33,10 @@ class StockerToolWindow : ToolWindowFactory {
 
     override fun init(toolWindow: ToolWindow) {
         super.init(toolWindow)
+        // Per-market CN/HK/US/Crypto tabs were dropped — ALL + Watchlist cover every
+        // surface those tabs offered. Per-market data is still fetched (the ALL tab
+        // and the watchlist tab need it); only the UI is gone.
         allView = StockerSimpleToolWindow()
-        tabViewMap = mapOf(
-            StockerMarketType.AShare to StockerSimpleToolWindow(),
-            StockerMarketType.HKStocks to StockerSimpleToolWindow(),
-            StockerMarketType.USStocks to StockerSimpleToolWindow(),
-            StockerMarketType.Crypto to StockerSimpleToolWindow()
-        )
         myApplication = StockerApp()
     }
 
@@ -55,28 +50,9 @@ class StockerToolWindow : ToolWindowFactory {
         
         val allContent = contentFactory.createContent(allView.component, "ALL", false)
         contentManager.addContent(allContent)
-        val aShareContent = contentFactory.createContent(
-            tabViewMap[StockerMarketType.AShare]?.component, StockerMarketType.AShare.title, false
-        )
-        contentManager.addContent(aShareContent)
-        val hkStocksContent = contentFactory.createContent(
-            tabViewMap[StockerMarketType.HKStocks]?.component, StockerMarketType.HKStocks.title, false
-        )
-        contentManager.addContent(hkStocksContent)
-        val usStocksContent = contentFactory.createContent(
-            tabViewMap[StockerMarketType.USStocks]?.component, StockerMarketType.USStocks.title, false
-        )
-        contentManager.addContent(usStocksContent)
-        val cryptoContent = contentFactory.createContent(
-            tabViewMap[StockerMarketType.Crypto]?.component,
-            StockerMarketType.Crypto.title,
-            false
-        )
-        contentManager.addContent(cryptoContent)
 
         // Watchlist tab — read-only view of ~/Claude/finance/watchlist.json. Only created
-        // when the finance bridge is enabled; sits between Crypto and Finance so the
-        // market tabs stay grouped together on the left.
+        // when the finance bridge is enabled; sits between ALL and Finance.
         val setting = com.vermouthx.stocker.settings.StockerSetting.instance
         if (setting.financeBridgeEnabled) {
             val watchlist = StockerSimpleToolWindow()
@@ -124,10 +100,6 @@ class StockerToolWindow : ToolWindowFactory {
         // Dispose all table views
         allView.tableView.dispose()
         allView.disposeFinance()
-        tabViewMap.values.forEach {
-            it.tableView.dispose()
-            it.disposeFinance()
-        }
         watchlistView?.tableView?.dispose()
         watchlistView?.disposeFinance()
         watchlistView = null
@@ -162,58 +134,6 @@ class StockerToolWindow : ToolWindowFactory {
             messageBusConnections.add(messageBus.connect().apply {
                 subscribe(STOCK_ALL_QUOTE_RELOAD_TOPIC, StockerQuoteReloadListener(v.tableView))
             })
-        }
-        
-        tabViewMap.forEach { (market, myTableView) ->
-            when (market) {
-                StockerMarketType.AShare -> {
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(STOCK_CN_QUOTE_UPDATE_TOPIC, StockerQuoteUpdateListener(myTableView.tableView))
-                    })
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(STOCK_CN_QUOTE_DELETE_TOPIC, StockerQuoteDeleteListener(myTableView.tableView))
-                    })
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(STOCK_CN_QUOTE_RELOAD_TOPIC, StockerQuoteReloadListener(myTableView.tableView))
-                    })
-                }
-
-                StockerMarketType.HKStocks -> {
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(STOCK_HK_QUOTE_UPDATE_TOPIC, StockerQuoteUpdateListener(myTableView.tableView))
-                    })
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(STOCK_HK_QUOTE_DELETE_TOPIC, StockerQuoteDeleteListener(myTableView.tableView))
-                    })
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(STOCK_HK_QUOTE_RELOAD_TOPIC, StockerQuoteReloadListener(myTableView.tableView))
-                    })
-                }
-
-                StockerMarketType.USStocks -> {
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(STOCK_US_QUOTE_UPDATE_TOPIC, StockerQuoteUpdateListener(myTableView.tableView))
-                    })
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(STOCK_US_QUOTE_DELETE_TOPIC, StockerQuoteDeleteListener(myTableView.tableView))
-                    })
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(STOCK_US_QUOTE_RELOAD_TOPIC, StockerQuoteReloadListener(myTableView.tableView))
-                    })
-                }
-
-                StockerMarketType.Crypto -> {
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(CRYPTO_QUOTE_UPDATE_TOPIC, StockerQuoteUpdateListener(myTableView.tableView))
-                    })
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(CRYPTO_QUOTE_DELETE_TOPIC, StockerQuoteDeleteListener(myTableView.tableView))
-                    })
-                    messageBusConnections.add(messageBus.connect().apply {
-                        subscribe(STOCK_CRYPTO_QUOTE_RELOAD_TOPIC, StockerQuoteReloadListener(myTableView.tableView))
-                    })
-                }
-            }
         }
     }
 }
