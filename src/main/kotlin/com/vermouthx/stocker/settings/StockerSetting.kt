@@ -169,6 +169,30 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
             myState.financeNotifyTriggers = value
         }
 
+    var financeNotifyEntryTiming: Boolean
+        get() = myState.financeNotifyEntryTiming
+        set(value) {
+            myState.financeNotifyEntryTiming = value
+        }
+
+    var financeShowCalibrationTab: Boolean
+        get() = myState.financeShowCalibrationTab
+        set(value) {
+            myState.financeShowCalibrationTab = value
+        }
+
+    var financeShowEntryTimingTab: Boolean
+        get() = myState.financeShowEntryTimingTab
+        set(value) {
+            myState.financeShowEntryTimingTab = value
+        }
+
+    var financeHighlightThreadChange: Boolean
+        get() = myState.financeHighlightThreadChange
+        set(value) {
+            myState.financeHighlightThreadChange = value
+        }
+
     val allStockListSize: Int
         get() = aShareList.size + hkStocksList.size + usStocksList.size + cryptoList.size
 

@@ -417,6 +417,13 @@ public class StockerTableView implements Disposable {
         addWatchlistItem.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
         addWatchlistItem.addActionListener(e -> addSelectedToClaudeWatchlist());
 
+        // View entry-timing buy plan (reads ~/Claude/finance/reports/<today>/entry-timing.md)
+        JMenuItem entryTimingItem = new JMenuItem(StockerBundle.message("menu.view.entry.timing"));
+        entryTimingItem.setOpaque(true);
+        entryTimingItem.setRolloverEnabled(true);
+        entryTimingItem.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+        entryTimingItem.addActionListener(e -> showSelectedEntryTimingPlan());
+
         // Delete menu item
         JMenuItem deleteMenuItem = new JMenuItem(StockerBundle.message("menu.delete"));
         deleteMenuItem.setOpaque(true);
@@ -434,7 +441,7 @@ public class StockerTableView implements Disposable {
                 JBColor.namedColor("List.selectionForeground", tbBody.getSelectionForeground())
         );
 
-        for (JMenuItem item : new JMenuItem[]{focusMenuItem, addWatchlistItem, deleteMenuItem}) {
+        for (JMenuItem item : new JMenuItem[]{focusMenuItem, addWatchlistItem, entryTimingItem, deleteMenuItem}) {
             item.setBackground(defaultBackground);
             item.setForeground(defaultForeground);
             item.getModel().addChangeListener(ev -> {
@@ -471,9 +478,30 @@ public class StockerTableView implements Disposable {
         popupMenu.add(focusMenuItem);
         popupMenu.addSeparator();
         popupMenu.add(addWatchlistItem);
+        popupMenu.add(entryTimingItem);
         popupMenu.addSeparator();
         popupMenu.add(deleteMenuItem);
         return popupMenu;
+    }
+
+    private void showSelectedEntryTimingPlan() {
+        String code = popupTargetCode;
+        String name = popupTargetName;
+        if (code == null) {
+            int selectedRow = tbBody.getSelectedRow();
+            if (selectedRow < 0) {
+                clearPopupTarget();
+                return;
+            }
+            code = getStringValueAt(selectedRow, 0);
+            name = getStringValueAt(selectedRow, 1);
+        }
+        if (code == null) {
+            clearPopupTarget();
+            return;
+        }
+        com.vermouthx.stocker.finance.FinanceEntryTimingActions.showPopup(tbBody, code, name);
+        clearPopupTarget();
     }
 
     private void addSelectedToClaudeWatchlist() {

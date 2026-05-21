@@ -38,6 +38,18 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
     private var showNetProfit: Boolean = setting.isTableColumnVisible(StockerTableColumn.NET_PROFIT)
     private var showSparkline: Boolean = setting.isTableColumnVisible(StockerTableColumn.SPARKLINE)
 
+    // Finance bridge settings (mirrored on apply)
+    private var financeBridgeEnabled: Boolean = setting.financeBridgeEnabled
+    private var financeBaseDir: String = setting.financeBaseDir
+    private var anomalyThresholdPct: Double = setting.anomalyThresholdPct
+    private var anomalyStrongThresholdPct: Double = setting.anomalyStrongThresholdPct
+    private var financeNotifyAnomaly: Boolean = setting.financeNotifyAnomaly
+    private var financeNotifyTriggers: Boolean = setting.financeNotifyTriggers
+    private var financeNotifyEntryTiming: Boolean = setting.financeNotifyEntryTiming
+    private var financeShowEntryTimingTab: Boolean = setting.financeShowEntryTimingTab
+    private var financeShowCalibrationTab: Boolean = setting.financeShowCalibrationTab
+    private var financeHighlightThreadChange: Boolean = setting.financeHighlightThreadChange
+
     private var symbolCheckBox: JCheckBox? = null
     private var nameCheckBox: JCheckBox? = null
     private var currentCheckBox: JCheckBox? = null
@@ -256,6 +268,71 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 }
             }
 
+            group(StockerBundle.message("settings.group.finance")) {
+                row {
+                    checkBox(StockerBundle.message("settings.finance.bridge.enabled"))
+                        .bindSelected(::financeBridgeEnabled.toMutableProperty())
+                        .comment(StockerBundle.message("settings.finance.bridge.enabled.comment"))
+                }
+
+                row {
+                    label(StockerBundle.message("settings.finance.base.dir")).widthGroup("labels")
+                    textField()
+                        .bindText(::financeBaseDir.toMutableProperty())
+                        .widthGroup("comboboxes")
+                        .comment(StockerBundle.message("settings.finance.base.dir.comment"))
+                }.layout(RowLayout.LABEL_ALIGNED)
+
+                row {
+                    label(StockerBundle.message("settings.finance.anomaly.threshold")).widthGroup("labels")
+                    textField()
+                        .bindText(
+                            { "%.1f".format(anomalyThresholdPct) },
+                            { anomalyThresholdPct = it.toDoubleOrNull() ?: anomalyThresholdPct }
+                        )
+                        .widthGroup("comboboxes")
+                        .comment(StockerBundle.message("settings.finance.anomaly.threshold.comment"))
+                }.layout(RowLayout.LABEL_ALIGNED)
+
+                row {
+                    label(StockerBundle.message("settings.finance.anomaly.strong.threshold")).widthGroup("labels")
+                    textField()
+                        .bindText(
+                            { "%.1f".format(anomalyStrongThresholdPct) },
+                            { anomalyStrongThresholdPct = it.toDoubleOrNull() ?: anomalyStrongThresholdPct }
+                        )
+                        .widthGroup("comboboxes")
+                        .comment(StockerBundle.message("settings.finance.anomaly.strong.threshold.comment"))
+                }.layout(RowLayout.LABEL_ALIGNED)
+
+                row {
+                    checkBox(StockerBundle.message("settings.finance.notify.anomaly"))
+                        .bindSelected(::financeNotifyAnomaly.toMutableProperty())
+                }
+                row {
+                    checkBox(StockerBundle.message("settings.finance.notify.triggers"))
+                        .bindSelected(::financeNotifyTriggers.toMutableProperty())
+                }
+                row {
+                    checkBox(StockerBundle.message("settings.finance.notify.entry.timing"))
+                        .bindSelected(::financeNotifyEntryTiming.toMutableProperty())
+                        .comment(StockerBundle.message("settings.finance.notify.entry.timing.comment"))
+                }
+                row {
+                    checkBox(StockerBundle.message("settings.finance.tab.entry.timing"))
+                        .bindSelected(::financeShowEntryTimingTab.toMutableProperty())
+                }
+                row {
+                    checkBox(StockerBundle.message("settings.finance.tab.calibration"))
+                        .bindSelected(::financeShowCalibrationTab.toMutableProperty())
+                }
+                row {
+                    checkBox(StockerBundle.message("settings.finance.highlight.thread.change"))
+                        .bindSelected(::financeHighlightThreadChange.toMutableProperty())
+                        .comment(StockerBundle.message("settings.finance.highlight.thread.change.comment"))
+                }
+            }
+
             onApply {
                 val visibleColumns = buildVisibleColumns()
                 val columnsModified = visibleColumns != setting.visibleTableColumns
@@ -264,6 +341,8 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 val cryptoProviderModified = selectedCryptoProvider != setting.cryptoQuoteProvider
                 val pinyinModified = displayNameWithPinyin != setting.displayNameWithPinyin
                 val languageModified = languageOverride != setting.languageOverride
+                val financeDirChanged = financeBaseDir != setting.financeBaseDir
+                val financeEnabledChanged = financeBridgeEnabled != setting.financeBridgeEnabled
 
                 setting.quoteProvider = selectedProvider
                 setting.cryptoQuoteProvider = selectedCryptoProvider
@@ -271,6 +350,17 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 setting.displayNameWithPinyin = displayNameWithPinyin
                 setting.visibleTableColumns = visibleColumns
                 setting.languageOverride = languageOverride
+
+                setting.financeBridgeEnabled = financeBridgeEnabled
+                setting.financeBaseDir = financeBaseDir
+                setting.anomalyThresholdPct = anomalyThresholdPct
+                setting.anomalyStrongThresholdPct = anomalyStrongThresholdPct
+                setting.financeNotifyAnomaly = financeNotifyAnomaly
+                setting.financeNotifyTriggers = financeNotifyTriggers
+                setting.financeNotifyEntryTiming = financeNotifyEntryTiming
+                setting.financeShowEntryTimingTab = financeShowEntryTimingTab
+                setting.financeShowCalibrationTab = financeShowCalibrationTab
+                setting.financeHighlightThreadChange = financeHighlightThreadChange
 
                 if (columnsModified || languageModified) {
                     StockerTableView.refreshAllColumnVisibility()
@@ -281,6 +371,9 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 if (providerModified || cryptoProviderModified || pinyinModified || languageModified) {
                     refreshAllWindows()
                 }
+                if (financeDirChanged || financeEnabledChanged) {
+                    com.vermouthx.stocker.finance.FinanceBridgeService.instance.reloadNow()
+                }
             }
             onIsModified {
                 selectedProvider != setting.quoteProvider ||
@@ -288,7 +381,17 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                         colorPattern != setting.quoteColorPattern ||
                         displayNameWithPinyin != setting.displayNameWithPinyin ||
                         languageOverride != setting.languageOverride ||
-                        buildVisibleColumns() != setting.visibleTableColumns
+                        buildVisibleColumns() != setting.visibleTableColumns ||
+                        financeBridgeEnabled != setting.financeBridgeEnabled ||
+                        financeBaseDir != setting.financeBaseDir ||
+                        anomalyThresholdPct != setting.anomalyThresholdPct ||
+                        anomalyStrongThresholdPct != setting.anomalyStrongThresholdPct ||
+                        financeNotifyAnomaly != setting.financeNotifyAnomaly ||
+                        financeNotifyTriggers != setting.financeNotifyTriggers ||
+                        financeNotifyEntryTiming != setting.financeNotifyEntryTiming ||
+                        financeShowEntryTimingTab != setting.financeShowEntryTimingTab ||
+                        financeShowCalibrationTab != setting.financeShowCalibrationTab ||
+                        financeHighlightThreadChange != setting.financeHighlightThreadChange
             }
             onReset {
                 selectedProvider = setting.quoteProvider
@@ -309,6 +412,16 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 showHoldings = setting.isTableColumnVisible(StockerTableColumn.HOLDINGS)
                 showNetProfit = setting.isTableColumnVisible(StockerTableColumn.NET_PROFIT)
                 showSparkline = setting.isTableColumnVisible(StockerTableColumn.SPARKLINE)
+                financeBridgeEnabled = setting.financeBridgeEnabled
+                financeBaseDir = setting.financeBaseDir
+                anomalyThresholdPct = setting.anomalyThresholdPct
+                anomalyStrongThresholdPct = setting.anomalyStrongThresholdPct
+                financeNotifyAnomaly = setting.financeNotifyAnomaly
+                financeNotifyTriggers = setting.financeNotifyTriggers
+                financeNotifyEntryTiming = setting.financeNotifyEntryTiming
+                financeShowEntryTimingTab = setting.financeShowEntryTimingTab
+                financeShowCalibrationTab = setting.financeShowCalibrationTab
+                financeHighlightThreadChange = setting.financeHighlightThreadChange
                 columnWarningLabel?.isVisible = false
             }
         }

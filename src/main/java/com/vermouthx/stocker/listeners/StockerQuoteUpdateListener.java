@@ -1,6 +1,7 @@
 package com.vermouthx.stocker.listeners;
 
 import com.vermouthx.stocker.entities.StockerQuote;
+import com.vermouthx.stocker.finance.EntryTimingRecommendation;
 import com.vermouthx.stocker.finance.FinanceBridgeService;
 import com.vermouthx.stocker.finance.FinanceEventCalendar;
 import com.vermouthx.stocker.finance.FinanceState;
@@ -32,24 +33,28 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
     }
 
     /**
-     * Prefix the display name with calendar-event emojis (📊 earnings, 🔓 unlock) when
-     * the symbol has any upcoming or recent events recorded in earnings-tracker.md /
-     * position-risk-monitor.md.
+     * Prefix the display name with calendar-event emojis (📊 earnings, 🔓 unlock) and
+     * entry-timing grade (🟢A+/🟢A/🟡B/🔴C) when this symbol carries those signals.
      *
      * Returns the original name unchanged when finance/ has nothing for this code.
      */
     private static String prefixNameWithEvents(String baseName, String code) {
         try {
-            Set<FinanceEventCalendar.EventKind> events =
-                FinanceBridgeService.getInstance().snapshot().getEventsBySymbol()
-                    .getOrDefault(com.vermouthx.stocker.finance.FinanceSymbol.normalize(code),
-                                  java.util.Collections.emptySet());
-            if (events.isEmpty()) return baseName;
+            FinanceBridgeService bridge = FinanceBridgeService.getInstance();
+            Set<FinanceEventCalendar.EventKind> events = bridge.snapshot().getEventsBySymbol()
+                .getOrDefault(com.vermouthx.stocker.finance.FinanceSymbol.normalize(code),
+                              java.util.Collections.emptySet());
+            EntryTimingRecommendation entryRec = bridge.snapshot().getEntryTimingBySymbol()
+                .get(com.vermouthx.stocker.finance.FinanceSymbol.normalize(code));
+            String gradeGlyph = entryRec == null ? null : entryRec.getGradeGlyph();
+
             StringBuilder sb = new StringBuilder();
+            if (gradeGlyph != null) sb.append(gradeGlyph).append(' ');
             if (events.contains(FinanceEventCalendar.EventKind.EARNINGS)) sb.append("📊");
             if (events.contains(FinanceEventCalendar.EventKind.UNLOCK))   sb.append("🔓");
             if (sb.length() == 0) return baseName;
-            sb.append(' ').append(baseName);
+            if (sb.charAt(sb.length() - 1) != ' ') sb.append(' ');
+            sb.append(baseName);
             return sb.toString();
         } catch (Throwable t) {
             return baseName;
@@ -66,6 +71,8 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
             FinanceBridgeService bridge = FinanceBridgeService.getInstance();
             FinanceState.Health h = bridge.healthOf(code);
             WatchlistEntry entry = bridge.watchlistEntry(code);
+            EntryTimingRecommendation rec = bridge.snapshot().getEntryTimingBySymbol()
+                .get(com.vermouthx.stocker.finance.FinanceSymbol.normalize(code));
 
             StringBuilder tip = new StringBuilder();
             if (entry != null) {
@@ -81,6 +88,30 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
                 }
                 if (entry.getTrigger() != null) {
                     tip.append("trigger: ").append(entry.getTrigger()).append("\n");
+                }
+            }
+            if (rec != null) {
+                tip.append("──── entry-timing ────\n");
+                if (rec.getGrade() != null) {
+                    tip.append("grade: ").append(rec.getGrade());
+                    if (rec.getEntryType() != null) tip.append(" · ").append(rec.getEntryType());
+                    tip.append('\n');
+                }
+                if (rec.getTriggerPrice() != null) {
+                    tip.append("trigger: ¥").append(String.format("%.2f", rec.getTriggerPrice())).append('\n');
+                }
+                if (rec.getInvalidationPrice() != null) {
+                    tip.append("失效价: ¥").append(String.format("%.2f", rec.getInvalidationPrice())).append('\n');
+                }
+                if (rec.getFirstPositionPct() != null) {
+                    tip.append("首仓: ").append(rec.getFirstPositionPct()).append("%");
+                    if (rec.getAddSchedule() != null) tip.append(" · 加仓 ").append(rec.getAddSchedule());
+                    tip.append('\n');
+                }
+                if (rec.getAlignedThread() != null) {
+                    tip.append("主线: ").append(rec.getAlignedThread());
+                    if (rec.getThreadPhase() != null) tip.append(" (").append(rec.getThreadPhase()).append(")");
+                    tip.append('\n');
                 }
             }
             String glyph;
@@ -100,9 +131,9 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
                     else tip.insert(0, "状态: 警戒（已触发或 thesis 偏离 ≥3）\n");
                     break;
                 default:
-                    if (entry == null) return null;
+                    if (entry == null && rec == null) return null;
                     glyph = "-";
-                    if (tip.length() == 0) tip.append("watchlist 已收录，暂无 position-risk-monitor 报告");
+                    if (tip.length() == 0) tip.append("已收录至 finance/，暂无 position-risk-monitor / entry-timing 报告");
                     break;
             }
             return glyph + "|" + tip.toString().trim();

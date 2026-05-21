@@ -109,6 +109,7 @@ class FinanceBridgeService : Disposable {
                     strongAnomalyPct = setting.anomalyStrongThresholdPct,
                     notifyAnomaly = setting.financeNotifyAnomaly,
                     notifyTriggers = setting.financeNotifyTriggers,
+                    notifyEntryTiming = setting.financeNotifyEntryTiming,
                 )
             }
         )

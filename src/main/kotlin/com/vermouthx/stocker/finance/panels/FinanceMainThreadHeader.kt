@@ -5,17 +5,26 @@ import com.intellij.ui.components.JBLabel
 import com.vermouthx.stocker.finance.FinanceBridgeService
 import com.vermouthx.stocker.finance.FinanceMarketSnapshot
 import com.vermouthx.stocker.finance.FinanceState
+import com.vermouthx.stocker.settings.StockerSetting
 import java.awt.BorderLayout
+import java.awt.Color
 import java.awt.Font
 import java.awt.GridLayout
 import javax.swing.BorderFactory
 import javax.swing.JPanel
 import javax.swing.SwingConstants
+import javax.swing.Timer
 
 /**
  * Two-line header above the quotes table:
- *   Row 1: active main_thread · phase · age days · report date
+ *   Row 1: active main_thread · phase · age days · health trend  (+ 🔄 if leader rotated)
  *   Row 2: market breadth — advancers/decliners, limit-up/down, turnover
+ *
+ * v2 enhancements:
+ *   - 🚨 phase transition flash: when today's phase ≠ yesterday's, background flashes
+ *     yellow for ~3 seconds the first time the header reloads with the new combo.
+ *   - ↗/↘ health trend arrow derived from the last 3 days' thread_health_score samples.
+ *   - 🔄 badge + tooltip when current_leader ≠ prior leader.
  *
  * Auto-hides whichever line lacks data, so users without finance/ see nothing.
  */
@@ -30,6 +39,13 @@ internal class FinanceMainThreadHeader : JPanel(BorderLayout()) {
     private val breadthRow = JPanel(BorderLayout())
 
     private val refreshHook: () -> Unit = { reload() }
+
+    /** Cached "last seen" combo so we only flash once per transition. */
+    private var lastSeenPhase: String? = null
+    private var lastSeenLeader: String? = null
+    private var lastSeenThread: String? = null
+    private val defaultBg: Color = JBColor.background()
+    private val flashBg: Color = JBColor(Color(0xFFF1B8), Color(0x5A4B1A))   // soft amber
 
     init {
         layout = GridLayout(2, 1)
@@ -79,9 +95,77 @@ internal class FinanceMainThreadHeader : JPanel(BorderLayout()) {
         }
         threadRow.isVisible = true
         val phase = snap.threadPhase ?: "?"
+        val priorPhase = snap.priorThreadPhase
         val ageStr = snap.threadAgeDays?.let { "D$it" } ?: "D?"
-        threadLeft.text = "🧭 $mt · $phase · $ageStr"
+
+        val phaseSegment = if (!priorPhase.isNullOrBlank() && priorPhase != phase) {
+            // explicit transition arrow
+            "$priorPhase → $phase ⚠️"
+        } else {
+            phase
+        }
+        val healthArrow = healthArrow(snap.threadHealthSeries)
+        val rotationBadge = if (snap.leaderRotation) " 🔄" else ""
+        val leftText = buildString {
+            append("🧭 $mt · $phaseSegment · $ageStr")
+            if (healthArrow.isNotEmpty()) append(" · $healthArrow")
+            append(rotationBadge)
+        }
+        threadLeft.text = leftText
+        if (snap.leaderRotation) {
+            threadLeft.toolTipText = buildString {
+                append("龙头轮换：${snap.priorLeader ?: "?"} → ${snap.currentLeader ?: "?"}")
+            }
+        } else {
+            threadLeft.toolTipText = null
+        }
         threadRight.text = snap.reportDate?.let { "@ $it" } ?: ""
+
+        maybeFlashOnChange(mt, phase, snap.currentLeader)
+    }
+
+    private fun healthArrow(series: List<Int>): String {
+        if (series.size < 2) {
+            return series.firstOrNull()?.let { "健康度 $it" } ?: ""
+        }
+        val first = series.first()
+        val last = series.last()
+        val arrow = when {
+            last > first + 2 -> "↗"
+            last < first - 2 -> "↘"
+            else -> "→"
+        }
+        return "健康度 $first $arrow $last"
+    }
+
+    /**
+     * Flash background once when the (thread, phase, leader) triple flips.
+     * Avoids repeated flashing during file-watcher noise — keyed on the *combo*.
+     */
+    private fun maybeFlashOnChange(thread: String, phase: String, leader: String?) {
+        if (!StockerSetting.instance.financeHighlightThreadChange) return
+        // First render after IDE start should not flash — we have no "previous" baseline yet.
+        val isFirstSeen = lastSeenThread == null && lastSeenPhase == null && lastSeenLeader == null
+        val changed = !isFirstSeen && (
+            thread != lastSeenThread || phase != lastSeenPhase || leader != lastSeenLeader
+        )
+        lastSeenThread = thread
+        lastSeenPhase = phase
+        lastSeenLeader = leader
+        if (changed) flashOnce()
+    }
+
+    private fun flashOnce() {
+        threadRow.isOpaque = true
+        threadRow.background = flashBg
+        val timer = Timer(3_000) {
+            threadRow.background = defaultBg
+            threadRow.isOpaque = false
+            repaint()
+        }
+        timer.isRepeats = false
+        timer.start()
+        repaint()
     }
 
     private fun renderBreadthRow(s: FinanceMarketSnapshot?) {

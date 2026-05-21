@@ -35,4 +35,12 @@ class StockerSettingState {
     var financeNotifyAnomaly: Boolean = true
     /** Fire notifications when price enters target_zone low or breaks invalidation level. */
     var financeNotifyTriggers: Boolean = true
+    /** Fire notifications when live price crosses entry-timing.md trigger or invalidation. */
+    var financeNotifyEntryTiming: Boolean = true
+    /** Show the calibration "pred vs actual" sub-tab in the Finance tool window. */
+    var financeShowCalibrationTab: Boolean = true
+    /** Show the entry-timing sub-tab in the Finance tool window. */
+    var financeShowEntryTimingTab: Boolean = true
+    /** Flash the main-thread header for ~3s when phase or leader transitions vs yesterday. */
+    var financeHighlightThreadChange: Boolean = true
 }

@@ -30,6 +30,8 @@ internal class FinanceNotifier(
         LIMIT_DOWN("跌停", "Limit down", NotificationType.ERROR),
         TRIGGER_HIT("触发买点", "Trigger hit", NotificationType.WARNING),
         INVALIDATION_HIT("触发证伪", "Invalidation hit", NotificationType.ERROR),
+        ENTRY_TRIGGER("entry-timing 买点", "Entry trigger", NotificationType.WARNING),
+        ENTRY_INVALIDATION("entry-timing 失效", "Entry invalidation", NotificationType.ERROR),
     }
 
     fun fire(symbol: String, name: String?, kind: Kind, currentPrice: Double, percent: Double, detail: String?) {
