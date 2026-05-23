@@ -40,6 +40,14 @@ internal class FinanceReportNotifier(
                 fireLongHuBang(flow, today)
             }
         }
+        // 3) canonical thread drift — fires once per drift-set per day (CLAUDE.md red line #3)
+        val drifts = state.get().canonicalDrifts
+        drifts.forEach { d ->
+            val key = "thread-drift|$today|${d.normalizedKey}"
+            if (notified.putIfAbsent(key, true) == null) {
+                fireThreadDrift(d, today)
+            }
+        }
     }
 
     fun reset() = notified.clear()
@@ -73,6 +81,16 @@ internal class FinanceReportNotifier(
         if (hits.isEmpty()) return
         val body = hits.take(15).joinToString("\n")
         notify("🐯 $date 龙虎榜命中 ${hits.size} 条 watchlist/持仓", body, NotificationType.WARNING)
+    }
+
+    private fun fireThreadDrift(d: CanonicalDrift, date: LocalDate) {
+        val sources = d.sources.entries.joinToString("\n") { (spelling, agents) ->
+            "  • \"$spelling\" — ${agents.joinToString(", ")}"
+        }
+        val body = "$date 在多份报告里发现同一主线的不同拼写（CLAUDE.md 红线 #3）：\n" +
+            "$sources\n" +
+            "→ 建议: 把 thread-tracker 标准名补进 docs/canonical-threads.md，agent prompt 统一"
+        notify("⚠️ 主线命名漂移 (${d.spellings.size} 种拼写)", body, NotificationType.WARNING)
     }
 
     private fun notify(title: String, body: String, type: NotificationType) {

@@ -58,6 +58,16 @@ class FinanceState {
          * size > 1.
          */
         val scenarioTrees: Map<String, ThreadScenarioTree>,
+        /**
+         * Main_thread naming drift groups detected across today's reports
+         * (CLAUDE.md red line #3 protection). Empty list = no drift.
+         */
+        val canonicalDrifts: List<CanonicalDrift>,
+        /**
+         * Liquidity environment parsed from macro-radar.md YAML
+         * (`liquidity_env: 宽松/中性/紧缩`). Null if not present.
+         */
+        val liquidityEnv: String?,
     ) {
         companion object {
             val EMPTY = Snapshot(
@@ -82,6 +92,8 @@ class FinanceState {
                 calibrationSummary = null,
                 scenarioTree = null,
                 scenarioTrees = emptyMap(),
+                canonicalDrifts = emptyList(),
+                liquidityEnv = null,
             )
         }
     }
@@ -150,6 +162,10 @@ class FinanceState {
         val scenarioMap = readAllScenarioTrees(financeDir, today)
         val scenarioTree = scenarioMap.values.firstOrNull()
 
+        // canonical thread drift scan (red line #3)
+        val drifts = try { FinanceCanonicalThreads.detect(financeDir, today) } catch (_: Exception) { emptyList() }
+        val liquidity = readLiquidityEnv(financeDir, today)
+
         current.set(
             Snapshot(
                 watchlistBySymbol = watchlist.associateBy { it.normalizedKey },
@@ -173,9 +189,45 @@ class FinanceState {
                 calibrationSummary = calSummary,
                 scenarioTree = scenarioTree,
                 scenarioTrees = scenarioMap,
+                canonicalDrifts = drifts,
+                liquidityEnv = liquidity,
             )
         )
     }
+
+    /**
+     * Read macro-radar.md and extract the liquidity environment.
+     * Strategy (in order):
+     *   1. YAML `judgment_snapshot.liquidity_env` (preferred — agent should emit)
+     *   2. YAML `judgment_snapshot.liquidity_environment`
+     *   3. YAML `judgment_snapshot.macro.liquidity_env`
+     *   4. YAML `judgment_snapshot.title` — heuristic match for "流动性<X>"
+     *   5. Markdown body — substring match for "流动性环境定级" + "宽松/中性/紧缩"
+     */
+    private fun readLiquidityEnv(financeDir: Path, today: LocalDate): String? {
+        for (b in 0..5) {
+            val d = today.minusDays(b.toLong())
+            val md = FinanceReportLocator.readReport(financeDir, "macro-radar", d) ?: continue
+            val yaml = FinanceReportYaml.extractLastYamlBlock(md)
+            if (yaml != null) {
+                val tree = FinanceReportYaml.parseSimpleYaml(yaml)
+                val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+                val direct = (snap["liquidity_env"] as? String)?.takeIf { it.isNotBlank() }
+                    ?: (snap["liquidity_environment"] as? String)?.takeIf { it.isNotBlank() }
+                    ?: (FinanceReportYaml.mapAt(snap, "macro")?.get("liquidity_env") as? String)?.takeIf { it.isNotBlank() }
+                if (direct != null) return direct
+                // Title fallback: "宏观雷达 -- 流动性中性偏紧，边际恶化中"
+                val title = (snap["title"] as? String) ?: ""
+                LIQUIDITY_TITLE_RE.find(title)?.let { return it.groupValues[1].trim() }
+            }
+            // Markdown body fallback
+            LIQUIDITY_BODY_RE.find(md)?.let { return it.groupValues[1].trim() }
+        }
+        return null
+    }
+
+    private val LIQUIDITY_TITLE_RE = Regex("""流动性([宽中紧][^，,。\s]{0,8})""")
+    private val LIQUIDITY_BODY_RE = Regex("""流动性环境[从转为].{0,12}?([宽中紧][^，,。\s]{0,8})""")
 
     /**
      * Walk back up to 5 days collecting all available scenario trees:

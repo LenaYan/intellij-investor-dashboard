@@ -44,57 +44,57 @@ object StockerNotification {
         val v = version
         return if (isChinese()) """
             <div style="${Styles.CONTAINER}">
-                <p style="${Styles.PARAGRAPH}">🎉 <strong>欢迎使用 Stocker v${v}！本次更新内容：</strong></p>
-                <h4 style="${Styles.HEADING}">✨ v${v} 新功能 — ScenarioPanel 多来源</h4>
+                <p style="${Styles.PARAGRAPH}">🎉 <strong>欢迎使用 Stocker v${v}！本次更新对齐 finance v2.4–v2.11：</strong></p>
+                <h4 style="${Styles.HEADING}">✨ v${v} 新功能 — 7 个新面板 + 状态栏 widget</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>主线追踪面板现在从 4 个 agent 来源消费分支树</strong>（v2.3 schema）
-                        <ul style="${Styles.SUB_LIST}">
-                            <li><code>market-research</code> 主线树（无前缀）</li>
-                            <li><code>thread-tracker</code> 每条活跃主线（无前缀）</li>
-                            <li>🔥 <code>theme-incubator</code> 候选主题（synthetic A 点火 / B 证伪）</li>
-                            <li>💼 <code>position-risk-monitor</code> 持仓预案（synthetic A 持有 / B 减半 / C 清仓）</li>
-                            <li>≥2 条时面板顶部出现下拉切换器</li>
-                        </ul>
-                    </li>
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>"距阈值"列消除正则脆弱性</strong>
-                        <ul style="${Styles.SUB_LIST}">
-                            <li>v2.3 <code>triggers_struct</code> 结构化字段优先于正则抽数字</li>
-                            <li>区间式 pullback 触发（如"回踩 67-69"）现在正确检查整个区间，旧逻辑只能锚单点 ±1.5%</li>
-                            <li>pre-v2.3 报告通过正则保留兜底</li>
-                        </ul>
-                    </li>
+                    <li style="${Styles.LIST_ITEM}">📢 <strong>消息雷达 Tab</strong> — news-radar.md v2.4 二维矩阵（高置信表 + 价量对账 + 政策推演 + 小作文）</li>
+                    <li style="${Styles.LIST_ITEM}">🗞️ <strong>小作文台账 Tab</strong> — rumors.jsonl 状态机（pending/watching/confirmed/refuted）；scope 命中持仓的 🎯 高亮</li>
+                    <li style="${Styles.LIST_ITEM}">📅 <strong>今日调度横幅</strong> — daily-coordinator.md 调度清单（✅/⏳/⏭️）；待跑标黄</li>
+                    <li style="${Styles.LIST_ITEM}">⚠️ <strong>主线命名漂移监测</strong> — CLAUDE.md 红线 #3 闭环；跨报告 alias 自动告警</li>
+                    <li style="${Styles.LIST_ITEM}">🎯 <strong>证伪信号实时盘</strong> — 昨日 failure_signals 配实时行情打 ✅/❌/⏸</li>
+                    <li style="${Styles.LIST_ITEM}">🌡️ <strong>板块温度 Tab</strong> — sector-tracker.json 30+ 板块强弱榜 + 异动 Top</li>
+                    <li style="${Styles.LIST_ITEM}">📚 <strong>深度研究 Tab</strong> — sessions/ 按分类分组的 stock-deep-dive / industry-mapping 浏览器</li>
                 </ul>
-                <div style="${Styles.INFO_BOX}">
-                    <p style="margin: 0; font-size: 12px;">💡 <strong>说明：</strong>需要对应 agent 报告里包含 v2.3 schema 字段（<code>thread_scenario_tree</code> / <code>triggers_struct</code> / <code>ignition_struct</code> / <code>position_scenarios</code>）。</p>
-                </div>
+                <h4 style="${Styles.HEADING}">🔧 主线 Header / 状态栏增强</h4>
+                <ul style="margin: 0; padding-left: 18px;">
+                    <li style="${Styles.LIST_ITEM}">💧 流动性环境徽章（macro-radar 提取，宽松🟢/中性⚪/紧缩🔴）</li>
+                    <li style="${Styles.LIST_ITEM}">▁▂▃▄▅▆▇█ 健康度 sparkline（最近 3 天走势）</li>
+                    <li style="${Styles.LIST_ITEM}">IDE 状态栏 widget 常驻显示 "🧭 主线 · phase · D{age} · H{score} · 💧"</li>
+                </ul>
+                <h4 style="${Styles.HEADING}">📦 其他</h4>
+                <ul style="margin: 0; padding-left: 18px;">
+                    <li style="${Styles.LIST_ITEM}">持仓 DISTANCE 列接入（无 watchlist/entry-timing 计划也显示成本和浮盈）</li>
+                    <li style="${Styles.LIST_ITEM}">右键菜单新增"查看多空辩论 / 风格投票"</li>
+                    <li style="${Styles.LIST_ITEM}">FinanceFileWatcher 加 500ms 去抖（/复盘 期间不再刷屏）</li>
+                </ul>
                 <p style="${Styles.SMALL_TEXT}">💖 如果您觉得这个插件有帮助，请考虑点击下方的 <strong>Donate</strong> 按钮以支持开发。谢谢！📈</p>
             </div>
         """.trimIndent() else """
             <div style="${Styles.CONTAINER}">
-                <p style="${Styles.PARAGRAPH}">🎉 <strong>Welcome to Stocker v${v}! Here's what's new in this release:</strong></p>
-                <h4 style="${Styles.HEADING}">✨ New in v${v} — Multi-source ScenarioPanel</h4>
+                <p style="${Styles.PARAGRAPH}">🎉 <strong>Welcome to Stocker v${v}! Aligned with finance v2.4–v2.11:</strong></p>
+                <h4 style="${Styles.HEADING}">✨ New in v${v} — 7 new panels + status bar widget</h4>
                 <ul style="margin: 0; padding-left: 18px;">
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>Thread Tracker panel now consumes scenario trees from 4 agent sources</strong> (v2.3 schema)
-                        <ul style="${Styles.SUB_LIST}">
-                            <li><code>market-research</code> primary tree (no prefix)</li>
-                            <li><code>thread-tracker</code> per-active-thread (no prefix)</li>
-                            <li>🔥 <code>theme-incubator</code> candidates (synthetic A 点火 / B 证伪)</li>
-                            <li>💼 <code>position-risk-monitor</code> positions (synthetic A 持有 / B 减半 / C 清仓)</li>
-                            <li>Dropdown selector appears when ≥2 trees are available</li>
-                        </ul>
-                    </li>
-                    <li style="${Styles.LIST_ITEM}">✨ <strong>Trigger Distance column eliminates regex fragility</strong>
-                        <ul style="${Styles.SUB_LIST}">
-                            <li>v2.3 <code>triggers_struct</code> structured fields take precedence over regex extraction</li>
-                            <li>Range pullback triggers (e.g. "回踩 67-69") now check the whole range, not just a single point ±1.5%</li>
-                            <li>Pre-v2.3 reports fall back to regex extraction unchanged</li>
-                        </ul>
-                    </li>
+                    <li style="${Styles.LIST_ITEM}">📢 <strong>News Radar Tab</strong> — news-radar.md v2.4 2D-matrix view</li>
+                    <li style="${Styles.LIST_ITEM}">🗞️ <strong>Rumor Ledger Tab</strong> — rumors.jsonl state machine with scope-hit 🎯 highlight</li>
+                    <li style="${Styles.LIST_ITEM}">📅 <strong>Coordinator Banner</strong> — daily-coordinator schedule with ✅/⏳/⏭️ status</li>
+                    <li style="${Styles.LIST_ITEM}">⚠️ <strong>Thread name drift watchdog</strong> — CLAUDE.md red line #3 protection</li>
+                    <li style="${Styles.LIST_ITEM}">🎯 <strong>Live failure-signal monitor</strong> — yesterday's failure_signals × live quotes</li>
+                    <li style="${Styles.LIST_ITEM}">🌡️ <strong>Sector Thermometer Tab</strong> — sector-tracker.json strength ranking</li>
+                    <li style="${Styles.LIST_ITEM}">📚 <strong>Sessions Browser Tab</strong> — themed deep-dive markdown by category</li>
                 </ul>
-                <div style="${Styles.INFO_BOX}">
-                    <p style="margin: 0; font-size: 12px;">💡 <strong>Tip:</strong> Requires corresponding agent reports to carry v2.3 schema fields (<code>thread_scenario_tree</code> / <code>triggers_struct</code> / <code>ignition_struct</code> / <code>position_scenarios</code>).</p>
-                </div>
-                <p style="${Styles.SMALL_TEXT}">💖 If you find this plugin helpful, please consider clicking the <strong>Donate</strong> button below to support its development. Thank you! 📈</p>
+                <h4 style="${Styles.HEADING}">🔧 Main-thread Header / Status Bar</h4>
+                <ul style="margin: 0; padding-left: 18px;">
+                    <li style="${Styles.LIST_ITEM}">💧 Liquidity environment badge from macro-radar</li>
+                    <li style="${Styles.LIST_ITEM}">▁▂▃▄▅▆▇█ Health sparkline (last 3 days)</li>
+                    <li style="${Styles.LIST_ITEM}">IDE status bar widget showing main_thread / phase / age / health</li>
+                </ul>
+                <h4 style="${Styles.HEADING}">📦 Other</h4>
+                <ul style="margin: 0; padding-left: 18px;">
+                    <li style="${Styles.LIST_ITEM}">Portfolio fallback for DISTANCE column (cost-basis P&amp;L + health color)</li>
+                    <li style="${Styles.LIST_ITEM}">Right-click menu: "View bull-bear" / "View style-jury"</li>
+                    <li style="${Styles.LIST_ITEM}">FinanceFileWatcher 500ms debounce — no more flicker during /复盘 bursts</li>
+                </ul>
+                <p style="${Styles.SMALL_TEXT}">💖 If you find this plugin helpful, please consider clicking the <strong>Donate</strong> button below. Thank you! 📈</p>
             </div>
         """.trimIndent()
     }

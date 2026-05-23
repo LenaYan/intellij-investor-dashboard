@@ -28,6 +28,7 @@ internal class FinanceNotifier(
         // deprecated earlier when the DISTANCE column shipped.
         THREAD_BRANCH_FLIP("主线分支切换", "Scenario branch flip", NotificationType.WARNING),
         THREAD_OUT_OF_SCOPE("主线超预案", "Scenario out of scope", NotificationType.ERROR),
+        THREAD_NAME_DRIFT("主线命名漂移", "Thread name drift", NotificationType.WARNING),
     }
 
     fun fire(symbol: String, name: String?, kind: Kind, currentPrice: Double, percent: Double, detail: String?) {

@@ -19,17 +19,25 @@ import kotlin.concurrent.thread
  *   - reports/<today>/market-research.md
  *
  * Coarse-grained: any change in the watched directories triggers a full re-read
- * of [FinanceState]. The reload is cheap (small JSON + one YAML block extraction)
- * and the file change rate is human-scale, so debouncing is intentionally minimal.
+ * of [FinanceState]. Reload is coalesced through a 500ms debounce so that an
+ * agent writing N markdown files in rapid succession (common during /复盘) fires
+ * only once instead of N times.
  */
 internal class FinanceFileWatcher(
     private val financeDir: Path,
+    private val debounceMillis: Long = 500L,
     private val onReload: () -> Unit,
 ) {
     private val log = Logger.getInstance(FinanceFileWatcher::class.java)
     private val running = AtomicBoolean(false)
     @Volatile private var watcher: WatchService? = null
     @Volatile private var lastReportsDate: String? = null
+
+    // ── debounce state ─────────────────────────────────────────────────
+    private val debounceScheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "Stocker-FinanceFileWatcher-debounce").apply { isDaemon = true }
+    }
+    @Volatile private var pendingTask: java.util.concurrent.ScheduledFuture<*>? = null
 
     fun start() {
         if (!running.compareAndSet(false, true)) return
@@ -60,6 +68,25 @@ internal class FinanceFileWatcher(
             // ignore
         }
         watcher = null
+        pendingTask?.cancel(false)
+        pendingTask = null
+        debounceScheduler.shutdownNow()
+    }
+
+    /**
+     * Coalesce a burst of file changes into a single reload after [debounceMillis].
+     * Each new event resets the timer (trailing-edge debounce), so writing 5 files
+     * over ~200ms produces exactly one reload at +500ms from the LAST change.
+     */
+    private fun scheduleReload() {
+        pendingTask?.cancel(false)
+        pendingTask = debounceScheduler.schedule({
+            try {
+                onReload()
+            } catch (t: Throwable) {
+                log.warn("FinanceFileWatcher debounced reload threw: ${t.message}")
+            }
+        }, debounceMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     private fun runWatchLoop() {
@@ -95,11 +122,7 @@ internal class FinanceFileWatcher(
                 if (todayString() != lastReportsDate) {
                     registerTodayReports(ws)
                 }
-                try {
-                    onReload()
-                } catch (t: Throwable) {
-                    log.warn("FinanceFileWatcher reload threw: ${t.message}")
-                }
+                scheduleReload()
             }
             if (!valid) {
                 // The watch key is no longer valid (e.g. dir was deleted); exit cleanly.

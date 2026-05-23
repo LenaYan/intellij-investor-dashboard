@@ -54,7 +54,15 @@ internal object FinanceDistanceAnnotator {
         val key = FinanceSymbol.normalize(code)
         val rec = snap.entryTimingBySymbol[key]
         val watch = snap.watchlistBySymbol[key]
-        if (rec == null && watch == null) return null
+        val position = snap.portfolioBySymbol[key]
+        if (rec == null && watch == null && position == null) return null
+
+        // Portfolio fallback: when there's no entry-timing / watchlist anchor BUT the
+        // user holds this position, surface cost-basis P&L + health colour so the
+        // DISTANCE column is useful even for "no-plan" positions (#6).
+        if (rec == null && watch == null && position != null) {
+            return portfolioFallback(snap, position, currentPrice)
+        }
 
         // Prefer entry-timing prices (today's agent recommendation) over passive watchlist.
         // entry-timing 不买/C 等级仍然显示，但作为弱信号 — 用户可能想知道当前价位
@@ -169,5 +177,49 @@ internal object FinanceDistanceAnnotator {
         val tip = "距 ${if (anchor == anchorTrigger) "trigger" else "invalidation"} " +
             "¥${"%.2f".format(anchor)} ${"%+.1f%%".format(pct)}\n来源: $source"
         return Cell(Level.NONE, "${gradeBadge.orEmpty()}$arrow ${"%+.1f%%".format(pct)}", tip)
+    }
+
+    /**
+     * Portfolio-only fallback (no entry-timing / watchlist plan for this symbol).
+     * Shows cost-basis P&L and uses position-risk-monitor health to colour-code.
+     */
+    private fun portfolioFallback(
+        snap: FinanceState.Snapshot,
+        position: PortfolioPosition,
+        currentPrice: Double,
+    ): Cell? {
+        val cost = position.cost?.takeIf { it > 0 } ?: return null  // no cost → nothing to show
+        val pct = (currentPrice - cost) / cost * 100.0
+        val arrow = if (pct < 0) "↘" else if (pct > 0) "↗" else "—"
+        val health = snap.healthBySymbol[position.normalizedKey] ?: FinanceState.Health.UNKNOWN
+        val level = when (health) {
+            FinanceState.Health.RED -> Level.ALERT
+            FinanceState.Health.YELLOW -> Level.WARN
+            FinanceState.Health.GREEN -> Level.INFO
+            FinanceState.Health.UNKNOWN -> Level.NONE
+        }
+        val healthBadge = when (health) {
+            FinanceState.Health.RED -> "🔴 "
+            FinanceState.Health.YELLOW -> "🟡 "
+            FinanceState.Health.GREEN -> "🟢 "
+            FinanceState.Health.UNKNOWN -> ""
+        }
+        val text = "${healthBadge}持仓 ¥${"%.2f".format(cost)} $arrow ${"%+.1f%%".format(pct)}"
+        val tip = buildString {
+            append("成本 ¥${"%.2f".format(cost)} · 当前 ¥${"%.2f".format(currentPrice)}\n")
+            append("浮动盈亏 ${"%+.1f%%".format(pct)}")
+            if (position.qty != null) append("  ·  持仓 ${position.qty} 股")
+            append("\n来源: portfolio.json")
+            if (health != FinanceState.Health.UNKNOWN) {
+                append("\n健康度: ")
+                append(when (health) {
+                    FinanceState.Health.RED -> "🔴 RED — 触发风控阈值"
+                    FinanceState.Health.YELLOW -> "🟡 YELLOW — 接近触发或 thesis 偏离"
+                    FinanceState.Health.GREEN -> "🟢 GREEN"
+                    else -> "UNKNOWN"
+                })
+            }
+        }
+        return Cell(level, text, tip)
     }
 }

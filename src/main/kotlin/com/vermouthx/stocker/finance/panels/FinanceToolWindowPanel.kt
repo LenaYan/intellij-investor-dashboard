@@ -22,9 +22,15 @@ import javax.swing.JPanel
 internal class FinanceToolWindowPanel : JPanel(BorderLayout()), Disposable {
 
     private val reportsPanel = FinanceReportsPanel()
+    private val coordinatorBannerPanel = FinanceCoordinatorBanner()
     private val limitBoardPanel = FinanceLimitBoardPanel()
     private val sectorFlowPanel = FinanceSectorFlowPanel()
+    private val newsRadarPanel = FinanceNewsRadarPanel()
+    private val rumorLedgerPanel = FinanceRumorLedgerPanel()
+    private val failureSignalsPanel = FinanceFailureSignalsPanel()
+    private val sectorTrackerPanel = FinanceSectorTrackerPanel()
     private val threadPanel = FinanceThreadTrackerPanel()
+    private val sessionsPanel = FinanceSessionsPanel()
     private val judgmentsPanel = FinanceJudgmentsPanel()
     private val entryTimingPanel: FinanceEntryTimingPanel?
     private val calibrationPanel: FinanceCalibrationPanel?
@@ -38,10 +44,18 @@ internal class FinanceToolWindowPanel : JPanel(BorderLayout()), Disposable {
         tabs.addTab("📰 报告速读", reportsPanel)
         tabs.addTab("📈 涨停梯队", limitBoardPanel)
         tabs.addTab("💰 板块资金", sectorFlowPanel)
+        tabs.addTab("🌡️ 板块温度", sectorTrackerPanel)
+        tabs.addTab("📢 消息雷达", newsRadarPanel)
+        tabs.addTab("🗞️ 小作文台账", rumorLedgerPanel)
         tabs.addTab("🧭 主线追踪", threadPanel)
-        entryTimingPanel?.let { tabs.addTab("🎯 买入点", it) }
+        tabs.addTab("🎯 证伪信号", failureSignalsPanel)
+        entryTimingPanel?.let { tabs.addTab("📍 买入点", it) }
         calibrationPanel?.let { tabs.addTab("📋 昨日对照", it) }
         tabs.addTab("📊 命中率", judgmentsPanel)
+        tabs.addTab("📚 深度研究", sessionsPanel)
+
+        // Coordinator banner pinned on top, table below.
+        add(coordinatorBannerPanel, BorderLayout.NORTH)
         add(tabs, BorderLayout.CENTER)
     }
 
@@ -49,9 +63,15 @@ internal class FinanceToolWindowPanel : JPanel(BorderLayout()), Disposable {
 
     override fun dispose() {
         reportsPanel.dispose()
+        coordinatorBannerPanel.dispose()
         limitBoardPanel.dispose()
         sectorFlowPanel.dispose()
+        newsRadarPanel.dispose()
+        rumorLedgerPanel.dispose()
+        failureSignalsPanel.dispose()
+        sectorTrackerPanel.dispose()
         threadPanel.dispose()
+        sessionsPanel.dispose()
         judgmentsPanel.dispose()
         entryTimingPanel?.dispose()
         calibrationPanel?.dispose()

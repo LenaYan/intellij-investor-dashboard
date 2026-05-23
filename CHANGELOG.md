@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.25.0
+
+### ✨ New Features / 新功能
+
+- **📢 消息雷达 Tab** — renders today's `news-radar.md` (v2.4 schema) with high-confidence event table, Step 0.5 价量对账段, 政策推演, and 新增小作文 excerpt. Backed by new `FinanceNewsRadarLoader` that parses `judgment_snapshot.high_confidence_events / rumor_ledger_today / policy_deductions / price_volume_reconciliation`. `WELL_KNOWN_REPORTS` expanded to include `news-radar` + `news-radar-thematic` (and the rest of v2.10 agent suite) / 新增📢消息雷达标签，渲染 `news-radar.md` v2.4 二维矩阵 schema：高置信消息表 + 价量对账段 + 政策推演 + 小作文摘选
+
+- **🗞️ 小作文台账 Tab** — consumes `judgments/rumors.jsonl` (v2.4 二维矩阵台账)，grouped by status (pending / watching / confirmed / refuted) with scope-hit highlighting (🎯 prefix when rumor's scope mentions a watchlist/portfolio symbol). Resolution notes shown for confirmed/refuted entries for post-mortem reading / 新增🗞️小作文台账标签：consume rumors.jsonl 状态机；scope 命中 watchlist/持仓的 🎯 高亮；confirmed/refuted 的复盘记录段
+
+- **📅 今日调度横幅** — pinned banner at top of Finance tool window summarising `daily-coordinator.md` (v2.9 SessionStart hook). Shows date + trading-day flag + 持仓数 + watchlist 主线数 + ✅/⏳/⏭️ counts. Background tints amber when pending agents exist, green when all done. Tooltip lists every agent and group / 顶部新增今日调度横幅，机械版 daily-coordinator 调度清单一目了然：✅ 已跑 / ⏳ 待跑 / ⏭️ 跳过；待跑时背景标黄
+
+- **⚠️ 主线命名漂移监测** — new `FinanceCanonicalThreads` scans every report's `judgment_snapshot.main_thread`; when ≥2 distinct spellings normalize to the same key (e.g. "AI 算力" vs "AI算力" vs "算力链"), MainThreadHeader shows ⚠️漂移 badge and fires `THREAD_NAME_DRIFT` notification once per day per drift-set. Hardens CLAUDE.md red line #3 from the 5/22 14-alias incident / 新增主线命名漂移监测，红线 #3 闭环：跨报告对比 `main_thread` 拼写，发现 alias 立即弹气泡 + Header 标黄
+
+- **🎯 证伪信号实时盘 Tab** — `FinanceFailureSignalsLoader` extracts yesterday's `failure_signals[]` from market-research / overnight-brief YAML and heuristically parses three pattern families (index thresholds, 北向资金 magnitude, 6-digit code + percent). Live quote topic subscription rates each as ✅ HIT / ❌ NOT_HIT / ⏸ PENDING. Unparseable signals stay PENDING (left for daily-review manual calibration) / 新增🎯证伪信号实时盘：自动解析昨日 `failure_signals[]`，配合实时行情打 ✅/❌/⏸ 标签
+
+- **持仓 DISTANCE 列接入** — `FinanceDistanceAnnotator` adds a 3rd fallback path: when a symbol has no entry-timing recommendation AND no watchlist entry but IS held in portfolio.json, show cost-basis P&L + health-tinted background (🔴 RED / 🟡 YELLOW / 🟢 GREEN from position-risk-monitor) / DISTANCE 列对纯持仓（无 watchlist/entry-timing 计划）新增 fallback：显示成本和浮盈，颜色按 position-risk-monitor 健康度
+
+- **💧 流动性环境徽章** — MainThreadHeader and status bar widget now show `liquidity_env` from `macro-radar.md` (宽松 🟢 / 中性 ⚪ / 紧缩 🔴 / mixed e.g. 中性偏紧). Multi-tier fallback: YAML direct → title regex → markdown body regex / 主线 Header + 状态栏新增流动性环境徽章，从 macro-radar 提取（支持"中性偏紧"这类复合表达）
+
+- **🌡️ 板块温度 Tab** — new panel renders `sector-tracker.json` as 3 sections: today's anomaly leaderboard (sortable), sector strength ranking (by computed avg change%), and per-sector stock breakdown. Uses 🔥/🟢/⚪/🔴/🔻 glyphs to visualise relative strength / 新增🌡️板块温度标签：sector-tracker.json 30+ 板块强弱榜 + 异动 Top + 成分股明细
+
+- **健康度 sparkline** — MainThreadHeader's `健康度 X → Y` now also renders a unicode block sparkline (▁▂▃▄▅▆▇█) showing the actual 3-day trajectory shape, not just endpoints / Header 健康度行新增 unicode 火柴图，显示完整 3 天走势形状
+
+- **IDE 状态栏 widget** — `FinanceStatusBarWidget` registered via `statusBarWidgetFactory` extension; always-visible "🧭 主线 · phase · D{age} · H{score}  💧流动性 ⚠️" in IDE bottom bar. Click opens Stocker tool window. Tooltip shows full snapshot (leader, health series, drift groups) / 注册 IDE 状态栏 widget，常驻显示主线 + phase + 健康度 + 流动性 + 漂移告警
+
+- **📚 深度研究 Tab** — browser for `~/Claude/finance/sessions/{NN-分类}/` themed deep-dive markdown. Left list groups files by category with bold 📂 headers (`03-个股分析` / `04-板块主题` / etc.), right pane renders selected document / 新增📚深度研究标签：浏览 sessions/ 按分类分组的 stock-deep-dive / industry-mapping 等深度研究产出
+
+- **多空辩论 / 风格投票右键链接** — new context menu items "查看多空辩论 (bull-bear)" and "查看风格投票 (style-jury)" look up `reports/<date>/{bull-bear,style-jury}-<symbol>.md` with 7-day fallback and pop the markdown in a dialog. Shows info dialog when report is absent / 右键菜单新增"查看多空辩论 / 查看风格投票"，自动查找当日及前 7 天的 `bull-bear-{symbol}.md` / `style-jury-{symbol}.md`
+
+### 🔧 Infrastructure
+
+- **FinanceFileWatcher 500ms 去抖** — coalesces a burst of file-change events (common during `/复盘` agent runs writing many MD files in 200-300ms) into a single trailing-edge reload. Eliminates UI flicker and reduces panel rebuild count by ~5x / FinanceFileWatcher 加 500ms trailing-edge 去抖：`/复盘` 期间 5 份 MD 连续写入只触发 1 次 reload，UI 不再频繁刷新
+
+- **`reportsMatchingPrefix` 工具方法** — locates `prefix-*.md` files (bull-bear / style-jury / industry-mapping themed variants) without each one being hard-coded in WELL_KNOWN_REPORTS / 新增 `reportsMatchingPrefix` 工具：定位 `prefix-*.md` 变体报告，避免每个 symbol 都写死
+
+- **新 `THREAD_NAME_DRIFT` 通知 Kind** — registered alongside existing `THREAD_BRANCH_FLIP` / `THREAD_OUT_OF_SCOPE` in `FinanceNotifier.Kind` enum
+
 ## 1.24.0
 
 ### ✨ New Features / 新功能

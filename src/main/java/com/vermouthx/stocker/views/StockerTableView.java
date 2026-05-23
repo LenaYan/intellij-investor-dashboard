@@ -426,6 +426,20 @@ public class StockerTableView implements Disposable {
         entryTimingItem.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
         entryTimingItem.addActionListener(e -> showSelectedEntryTimingPlan());
 
+        // View bull-bear debate (reads ~/Claude/finance/reports/<today>/bull-bear-<symbol>.md)
+        JMenuItem bullBearItem = new JMenuItem("查看多空辩论 (bull-bear)");
+        bullBearItem.setOpaque(true);
+        bullBearItem.setRolloverEnabled(true);
+        bullBearItem.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+        bullBearItem.addActionListener(e -> showSelectedBullBear());
+
+        // View style jury (reads ~/Claude/finance/reports/<today>/style-jury-<symbol>.md)
+        JMenuItem styleJuryItem = new JMenuItem("查看风格投票 (style-jury)");
+        styleJuryItem.setOpaque(true);
+        styleJuryItem.setRolloverEnabled(true);
+        styleJuryItem.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+        styleJuryItem.addActionListener(e -> showSelectedStyleJury());
+
         // Delete menu item
         JMenuItem deleteMenuItem = new JMenuItem(StockerBundle.message("menu.delete"));
         deleteMenuItem.setOpaque(true);
@@ -443,7 +457,7 @@ public class StockerTableView implements Disposable {
                 JBColor.namedColor("List.selectionForeground", tbBody.getSelectionForeground())
         );
 
-        for (JMenuItem item : new JMenuItem[]{focusMenuItem, addWatchlistItem, entryTimingItem, deleteMenuItem}) {
+        for (JMenuItem item : new JMenuItem[]{focusMenuItem, addWatchlistItem, entryTimingItem, bullBearItem, styleJuryItem, deleteMenuItem}) {
             item.setBackground(defaultBackground);
             item.setForeground(defaultForeground);
             item.getModel().addChangeListener(ev -> {
@@ -481,9 +495,51 @@ public class StockerTableView implements Disposable {
         popupMenu.addSeparator();
         popupMenu.add(addWatchlistItem);
         popupMenu.add(entryTimingItem);
+        popupMenu.add(bullBearItem);
+        popupMenu.add(styleJuryItem);
         popupMenu.addSeparator();
         popupMenu.add(deleteMenuItem);
         return popupMenu;
+    }
+
+    private void showSelectedBullBear() {
+        String code = popupTargetCode;
+        String name = popupTargetName;
+        if (code == null) {
+            int selectedRow = tbBody.getSelectedRow();
+            if (selectedRow < 0) {
+                clearPopupTarget();
+                return;
+            }
+            code = getStringValueAt(selectedRow, 0);
+            name = getStringValueAt(selectedRow, 1);
+        }
+        if (code == null) {
+            clearPopupTarget();
+            return;
+        }
+        com.vermouthx.stocker.finance.FinanceReportActions.showBullBear(tbBody, code, name);
+        clearPopupTarget();
+    }
+
+    private void showSelectedStyleJury() {
+        String code = popupTargetCode;
+        String name = popupTargetName;
+        if (code == null) {
+            int selectedRow = tbBody.getSelectedRow();
+            if (selectedRow < 0) {
+                clearPopupTarget();
+                return;
+            }
+            code = getStringValueAt(selectedRow, 0);
+            name = getStringValueAt(selectedRow, 1);
+        }
+        if (code == null) {
+            clearPopupTarget();
+            return;
+        }
+        com.vermouthx.stocker.finance.FinanceReportActions.showStyleJury(tbBody, code, name);
+        clearPopupTarget();
     }
 
     private void showSelectedEntryTimingPlan() {

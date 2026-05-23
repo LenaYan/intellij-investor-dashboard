@@ -16,18 +16,27 @@ import java.time.ZoneId
 internal object FinanceReportLocator {
 
     val WELL_KNOWN_REPORTS = listOf(
+        "daily-coordinator",
         "overnight-brief",
         "market-research",
         "midday-review",
         "daily-review",
         "anomaly-scanner",
         "flow-monitor",
+        "news-radar",
+        "news-radar-thematic",
         "thread-tracker",
         "theme-incubator",
+        "candidate-ranker",
+        "entry-timing",
         "position-risk-monitor",
         "earnings-tracker",
         "macro-radar",
+        "sentiment-aggregator",
         "industry-mapping",
+        "watchlist-screener",
+        "weekly-review",
+        "monthly-review",
     )
 
     fun today(): LocalDate = LocalDate.now(ZoneId.of("Asia/Shanghai"))
@@ -58,6 +67,31 @@ internal object FinanceReportLocator {
         WELL_KNOWN_REPORTS.forEach { if (present.contains(it)) ordered.add(it) }
         present.forEach { ordered.add(it) }
         return ordered.toList()
+    }
+
+    /**
+     * Returns all report basenames matching a `prefix-*` pattern (e.g., `bull-bear-688981`,
+     * `industry-mapping-AI端侧设备`, `style-jury-XXX`). Used to expose per-symbol /
+     * per-theme variant reports without each one being hard-coded in WELL_KNOWN_REPORTS.
+     */
+    fun reportsMatchingPrefix(
+        financeDir: Path,
+        prefix: String,
+        date: LocalDate = today(),
+    ): List<String> {
+        val dir = reportDir(financeDir, date)
+        if (!Files.isDirectory(dir)) return emptyList()
+        return try {
+            Files.list(dir).use { stream ->
+                stream.map { it.fileName.toString() }
+                    .filter { it.endsWith(".md") && it.startsWith("$prefix-") }
+                    .map { it.removeSuffix(".md") }
+                    .sorted()
+                    .toList()
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     /** Returns the most-recent dated directory back-tracking up to 7 days. */

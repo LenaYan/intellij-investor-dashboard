@@ -106,27 +106,58 @@ internal class FinanceMainThreadHeader : JPanel(BorderLayout()) {
         }
         val healthArrow = healthArrow(snap.threadHealthSeries)
         val rotationBadge = if (snap.leaderRotation) " 🔄" else ""
+        val driftBadge = if (snap.canonicalDrifts.isNotEmpty()) " ⚠️漂移" else ""
+        val liquidityBadge = liquidityBadgeFor(snap.liquidityEnv)
         val leftText = buildString {
             append("🧭 $mt · $phaseSegment · $ageStr")
             if (healthArrow.isNotEmpty()) append(" · $healthArrow")
             append(rotationBadge)
+            append(driftBadge)
+            if (liquidityBadge.isNotEmpty()) append("  $liquidityBadge")
         }
         threadLeft.text = leftText
-        if (snap.leaderRotation) {
-            threadLeft.toolTipText = buildString {
+        threadLeft.toolTipText = buildString {
+            if (snap.leaderRotation) {
                 append("龙头轮换：${snap.priorLeader ?: "?"} → ${snap.currentLeader ?: "?"}")
+                if (snap.canonicalDrifts.isNotEmpty()) append("<br>")
             }
-        } else {
-            threadLeft.toolTipText = null
-        }
+            if (snap.canonicalDrifts.isNotEmpty()) {
+                append("<html><b>检测到主线命名漂移 (${snap.canonicalDrifts.size} 组)</b><br>")
+                snap.canonicalDrifts.forEach { d ->
+                    append("• ${d.spellings.joinToString(" / ")}<br>")
+                    d.sources.forEach { (sp, agents) ->
+                        append("&nbsp;&nbsp;\"$sp\" — ${agents.joinToString(", ")}<br>")
+                    }
+                }
+                append("</html>")
+            }
+        }.takeIf { it.isNotBlank() }
         threadRight.text = snap.reportDate?.let { "@ $it" } ?: ""
 
         maybeFlashOnChange(mt, phase, snap.currentLeader)
     }
 
+    /**
+     * Render the liquidity environment badge derived from macro-radar.md YAML.
+     * Returns "" if not present. Color-coded:
+     *   宽松 → 绿  · 中性 → 灰  · 紧缩 → 红
+     */
+    private fun liquidityBadgeFor(env: String?): String {
+        if (env.isNullOrBlank()) return ""
+        val short = env.trim()
+        val glyph = when {
+            short.contains("宽松") -> "🟢"
+            short.contains("紧缩") || short.contains("紧") -> "🔴"
+            short.contains("中性") -> "⚪"
+            else -> "💧"
+        }
+        return "$glyph 流动性: $short"
+    }
+
     private fun healthArrow(series: List<Int>): String {
+        if (series.isEmpty()) return ""
         if (series.size < 2) {
-            return series.firstOrNull()?.let { "健康度 $it" } ?: ""
+            return "健康度 ${series.first()}"
         }
         val first = series.first()
         val last = series.last()
@@ -135,7 +166,26 @@ internal class FinanceMainThreadHeader : JPanel(BorderLayout()) {
             last < first - 2 -> "↘"
             else -> "→"
         }
-        return "健康度 $first $arrow $last"
+        // Append a unicode block sparkline rendered from the actual series so the
+        // user sees the shape (not just first→last). 0-10 score maps to 8 levels.
+        val sparkline = renderSparkline(series)
+        return "健康度 $first $arrow $last  $sparkline"
+    }
+
+    /**
+     * Render a series of 0-10 scores as a unicode block sparkline.
+     * Uses the eighth-block range (▁ … █).
+     */
+    private fun renderSparkline(series: List<Int>): String {
+        if (series.isEmpty()) return ""
+        val blocks = charArrayOf('▁', '▂', '▃', '▄', '▅', '▆', '▇', '█')
+        val mx = series.maxOrNull() ?: return ""
+        val mn = series.minOrNull() ?: return ""
+        val range = (mx - mn).coerceAtLeast(1)
+        return series.joinToString("") { v ->
+            val idx = ((v - mn).toDouble() / range * (blocks.size - 1)).toInt().coerceIn(0, blocks.size - 1)
+            blocks[idx].toString()
+        }
     }
 
     /**

@@ -14,6 +14,9 @@
         <applicationConfigurable parentId="tools" displayName="Stocker"
                                  id="com.vermouthx.stocker.views.windows.StockerSettingWindow"
                                  instance="com.vermouthx.stocker.views.windows.StockerSettingWindow"/>
+        <statusBarWidgetFactory id="Stocker.FinanceStatusBar"
+                                implementation="com.vermouthx.stocker.finance.FinanceStatusBarWidgetFactory"
+                                order="last"/>
     </extensions>
     <projectListeners>
         <listener class="com.vermouthx.stocker.StockerAppManager$StockerProjectManagerListener" topic="com.intellij.openapi.project.ProjectManagerListener"/>
