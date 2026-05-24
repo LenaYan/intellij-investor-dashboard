@@ -43,14 +43,10 @@ data class CoordinatorSchedule(
 
 internal object FinanceDailyCoordinatorLoader {
 
-    fun load(financeDir: Path, today: LocalDate = FinanceReportLocator.today()): CoordinatorSchedule? {
-        for (b in 0..3) {
-            val d = today.minusDays(b.toLong())
-            val md = FinanceReportLocator.readReport(financeDir, "daily-coordinator", d) ?: continue
-            return parse(md, d)
+    fun load(financeDir: Path, today: LocalDate = FinanceReportLocator.today()): CoordinatorSchedule? =
+        FinanceReportLocator.walkRecentDays(today, 0..3) { d ->
+            FinanceReportLocator.readReport(financeDir, "daily-coordinator", d)?.let { parse(it, d) }
         }
-        return null
-    }
 
     private fun parse(md: String, date: LocalDate): CoordinatorSchedule {
         val lines = md.lines()

@@ -71,24 +71,19 @@ internal object FinanceNewsRadarLoader {
     fun loadFromReports(
         financeDir: Path,
         today: LocalDate = FinanceReportLocator.today(),
-    ): List<NewsRadarReport> {
-        for (b in 0..5) {
-            val d = today.minusDays(b.toLong())
+    ): List<NewsRadarReport> =
+        FinanceReportLocator.walkRecentDays(today, 0..5) { d ->
             val out = ArrayList<NewsRadarReport>()
             listOf("news-radar", "news-radar-thematic").forEach { basename ->
                 val md = FinanceReportLocator.readReport(financeDir, basename, d) ?: return@forEach
                 parse(md, d, basename)?.let { out.add(it) }
             }
-            if (out.isNotEmpty()) return out
-        }
-        return emptyList()
-    }
+            out.takeIf { it.isNotEmpty() }
+        }.orEmpty()
 
     @Suppress("UNCHECKED_CAST")
     private fun parse(md: String, date: LocalDate, basename: String): NewsRadarReport? {
-        val yaml = FinanceReportYaml.extractLastYamlBlock(md) ?: return null
-        val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-        val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+        val snap = FinanceReportYaml.readJudgmentSnapshot(md) ?: return null
 
         val high = (snap["high_confidence_events"] as? List<Any?>).orEmpty()
             .mapNotNull { parseEvent(it as? Map<String, Any?> ?: return@mapNotNull null) }
@@ -100,7 +95,7 @@ internal object FinanceNewsRadarLoader {
         val recon = (snap["price_volume_reconciliation"] as? Map<String, Any?>)?.let { m ->
             NewsRadarReconciliation(
                 index = m["index"]?.toString(),
-                changePct = asDouble(m["change_pct"]),
+                changePct = FinanceReportYaml.doubleAt(m, "change_pct"),
                 explainedBy = (m["explained_by"] as? List<Any?>).orEmpty().mapNotNull { it?.toString() },
                 unexplainedGap = when (val g = m["unexplained_gap"]) {
                     null, false, "false" -> null
@@ -121,7 +116,7 @@ internal object FinanceNewsRadarLoader {
             headline = headline,
             category = m["category"] as? String,
             sourceTier = m["source_tier"] as? String,
-            confidenceScore = asInt(m["confidence_score"]),
+            confidenceScore = FinanceReportYaml.intAt(m, "confidence_score"),
             freshness = m["freshness"] as? String,
             direction = m["direction"] as? String,
             impactLevel = m["impact_level"] as? String,
@@ -137,22 +132,7 @@ internal object FinanceNewsRadarLoader {
             policy = policy,
             purpose = m["purpose"] as? String,
             followUpPath = (m["follow_up_path"] as? List<Any?>).orEmpty().mapNotNull { it?.toString() },
-            confidence = asInt(m["confidence"]),
+            confidence = FinanceReportYaml.intAt(m, "confidence"),
         )
-    }
-
-    private fun asInt(v: Any?): Int? = when (v) {
-        is Int -> v
-        is Double -> v.toInt()
-        is String -> v.toIntOrNull()
-        else -> null
-    }
-
-    private fun asDouble(v: Any?): Double? = when (v) {
-        is Double -> v
-        is Int -> v.toDouble()
-        is Long -> v.toDouble()
-        is String -> v.toDoubleOrNull()
-        else -> null
     }
 }

@@ -47,28 +47,20 @@ internal object FinanceFailureSignalsLoader {
     fun loadYesterdaySignals(
         financeDir: Path,
         today: LocalDate = FinanceReportLocator.today(),
-    ): List<FailureSignal> {
-        // Try yesterday first, then walk back 5 days for non-trading days.
-        for (b in 1..5) {
-            val d = today.minusDays(b.toLong())
+    ): List<FailureSignal> =
+        FinanceReportLocator.walkRecentDays(today, 1..5) { d ->
             val out = ArrayList<FailureSignal>()
             listOf("market-research", "overnight-brief").forEach { agent ->
                 val md = FinanceReportLocator.readReport(financeDir, agent, d) ?: return@forEach
                 val list = extractFailureSignals(md) ?: return@forEach
-                list.forEach { raw ->
-                    out.add(parseSignal(raw, d, agent))
-                }
+                list.forEach { raw -> out.add(parseSignal(raw, d, agent)) }
             }
-            if (out.isNotEmpty()) return out
-        }
-        return emptyList()
-    }
+            out.takeIf { it.isNotEmpty() }
+        }.orEmpty()
 
     @Suppress("UNCHECKED_CAST")
     private fun extractFailureSignals(md: String): List<String>? {
-        val yaml = FinanceReportYaml.extractLastYamlBlock(md) ?: return null
-        val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-        val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+        val snap = FinanceReportYaml.readJudgmentSnapshot(md) ?: return null
         val list = snap["failure_signals"] as? List<Any?> ?: return null
         return list.mapNotNull { it?.toString() }.filter { it.isNotBlank() }
     }

@@ -40,55 +40,41 @@ object StockerQuoteHttpUtil {
         httpClientPool.close()
     }
 
+    /**
+     * Build the provider-specific URL fragment for a single symbol.
+     * A-share codes always carry sh/sz/bj prefix; HK and Tencent's US use uppercase; the rest
+     * lowercase. Returns null if [quoteProvider] doesn't support [marketType].
+     */
+    private fun providerSymbol(
+        quoteProvider: StockerQuoteProvider,
+        marketType: StockerMarketType,
+        code: String,
+    ): String? {
+        val prefix = quoteProvider.providerPrefixMap[marketType] ?: return null
+        return when {
+            marketType == StockerMarketType.AShare -> prefixedAShareCode(code)
+            marketType == StockerMarketType.HKStocks -> "$prefix${code.uppercase()}"
+            quoteProvider == StockerQuoteProvider.TENCENT && marketType == StockerMarketType.USStocks ->
+                "$prefix${code.uppercase()}"
+            else -> "$prefix${code.lowercase()}"
+        }
+    }
+
     fun get(
         marketType: StockerMarketType, quoteProvider: StockerQuoteProvider, codes: List<String>
     ): List<StockerQuote> {
         if (codes.isEmpty()) {
             return emptyList()
         }
-        
-        // Validate provider supports market type
-        val prefix = quoteProvider.providerPrefixMap[marketType]
-        if (prefix == null) {
+
+        // Validate provider supports market type (early-out keeps the per-code path simple).
+        if (quoteProvider.providerPrefixMap[marketType] == null) {
             log.warn("Provider ${quoteProvider.title} does not support market type $marketType")
             return emptyList()
         }
-        
-        val codesParam = when (quoteProvider) {
-            StockerQuoteProvider.SINA -> {
-                if (marketType == StockerMarketType.HKStocks) {
-                    codes.joinToString(",") { code ->
-                        "$prefix${code.uppercase()}"
-                    }
-                } else if (marketType == StockerMarketType.AShare) {
-                    // A-share codes need sh/sz prefix based on code number
-                    codes.joinToString(",") { code ->
-                        prefixedAShareCode(code)
-                    }
-                } else {
-                    // USStocks, Crypto use lowercase with provider prefix
-                    codes.joinToString(",") { code ->
-                        "$prefix${code.lowercase()}"
-                    }
-                }
-            }
 
-            StockerQuoteProvider.TENCENT -> {
-                if (marketType == StockerMarketType.HKStocks || marketType == StockerMarketType.USStocks) {
-                    codes.joinToString(",") { code ->
-                        "$prefix${code.uppercase()}"
-                    }
-                } else if (marketType == StockerMarketType.AShare) {
-                    // A-share codes need sh/sz prefix based on code number
-                    codes.joinToString(",") { code ->
-                        prefixedAShareCode(code)
-                    }
-                } else {
-                    codes.joinToString(",") { code ->
-                        "$prefix${code.lowercase()}"
-                    }
-                }
-            }
+        val codesParam = codes.joinToString(",") { code ->
+            providerSymbol(quoteProvider, marketType, code) ?: ""
         }
 
         val url = "${quoteProvider.host}${codesParam}"
@@ -202,49 +188,25 @@ object StockerQuoteHttpUtil {
         marketType: StockerMarketType, quoteProvider: StockerQuoteProvider, code: String
     ): Boolean {
         return try {
-            // Validate provider supports market type
-            val prefix = quoteProvider.providerPrefixMap[marketType]
-            if (prefix == null) {
+            val symbol = providerSymbol(quoteProvider, marketType, code)
+            if (symbol == null) {
                 log.warn("Provider ${quoteProvider.title} does not support market type $marketType")
                 return false
             }
-            
-            when (quoteProvider) {
-                StockerQuoteProvider.SINA -> {
-                    val url = if (marketType == StockerMarketType.HKStocks) {
-                        "${quoteProvider.host}$prefix${code.uppercase()}"
-                    } else if (marketType == StockerMarketType.AShare) {
-                        "${quoteProvider.host}${prefixedAShareCode(code)}"
-                    } else {
-                        "${quoteProvider.host}$prefix${code.lowercase()}"
-                    }
-                    val httpGet = HttpGet(url)
-                    httpGet.setHeader("Referer", "https://finance.sina.com.cn") // Sina API requires this header
-                    httpClientPool.client().execute(httpGet).use { response ->
-                        val responseText = EntityUtils.toString(response.entity, "UTF-8")
+            val httpGet = HttpGet("${quoteProvider.host}$symbol")
+            if (quoteProvider == StockerQuoteProvider.SINA) {
+                httpGet.setHeader("Referer", "https://finance.sina.com.cn")
+            }
+            httpClientPool.client().execute(httpGet).use { response ->
+                val responseText = EntityUtils.toString(response.entity, "UTF-8")
+                when (quoteProvider) {
+                    StockerQuoteProvider.SINA -> {
                         val firstLine = responseText.split("\n")[0]
-                        val start = firstLine.indexOfFirst { c -> c == '"' } + 1
-                        val end = firstLine.indexOfLast { c -> c == '"' }
-                        if (start == end) {
-                            return false
-                        }
-                        firstLine.subSequence(start, end).contains(",")
+                        val start = firstLine.indexOfFirst { it == '"' } + 1
+                        val end = firstLine.indexOfLast { it == '"' }
+                        start != end && firstLine.subSequence(start, end).contains(",")
                     }
-                }
-
-                StockerQuoteProvider.TENCENT -> {
-                    val url = if (marketType == StockerMarketType.HKStocks || marketType == StockerMarketType.USStocks) {
-                        "${quoteProvider.host}$prefix${code.uppercase()}"
-                    } else if (marketType == StockerMarketType.AShare) {
-                        "${quoteProvider.host}${prefixedAShareCode(code)}"
-                    } else {
-                        "${quoteProvider.host}$prefix${code.lowercase()}"
-                    }
-                    val httpGet = HttpGet(url)
-                    httpClientPool.client().execute(httpGet).use { response ->
-                        val responseText = EntityUtils.toString(response.entity, "UTF-8")
-                        !responseText.startsWith("v_pv_none_match")
-                    }
+                    StockerQuoteProvider.TENCENT -> !responseText.startsWith("v_pv_none_match")
                 }
             }
         } catch (e: Exception) {

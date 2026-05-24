@@ -95,12 +95,24 @@ internal object FinanceReportLocator {
     }
 
     /** Returns the most-recent dated directory back-tracking up to 7 days. */
-    fun mostRecentReportDate(financeDir: Path, today: LocalDate = today()): LocalDate? {
-        for (b in 0..7) {
-            val d = today.minusDays(b.toLong())
-            if (Files.isDirectory(reportDir(financeDir, d))) {
-                if (availableTodayReports(financeDir, d).isNotEmpty()) return d
-            }
+    fun mostRecentReportDate(financeDir: Path, today: LocalDate = today()): LocalDate? =
+        walkRecentDays(today, 0..7) { d ->
+            d.takeIf { Files.isDirectory(reportDir(financeDir, it)) && availableTodayReports(financeDir, it).isNotEmpty() }
+        }
+
+    /**
+     * Walk back from [today], inclusive, by `range.first..range.last` days and return the first
+     * non-null value produced by [body]. Use this for the recurring "look at today, fall back to
+     * previous trading days" pattern that appears across the finance/ readers.
+     *
+     * Examples:
+     *   `walkRecentDays(today, 0..5)` — today first, then 5 days back.
+     *   `walkRecentDays(today, 1..7)` — past 7 days only, skipping today.
+     */
+    inline fun <T : Any> walkRecentDays(today: LocalDate, range: IntRange, body: (LocalDate) -> T?): T? {
+        for (b in range) {
+            val result = body(today.minusDays(b.toLong()))
+            if (result != null) return result
         }
         return null
     }

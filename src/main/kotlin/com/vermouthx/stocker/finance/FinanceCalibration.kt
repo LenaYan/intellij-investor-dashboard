@@ -59,20 +59,16 @@ internal object FinanceCalibrationLoader {
         financeDir: Path,
         today: LocalDate = FinanceReportLocator.today(),
     ): Pair<List<CalibrationItem>, CalibrationSummary?> {
-        for (b in 0..7) {
-            val d = today.minusDays(b.toLong())
-            val md = FinanceReportLocator.readReport(financeDir, "daily-review", d) ?: continue
-            val res = parseFromMarkdown(md, reviewedDate = d)
-            if (res.second != null) return res
-        }
-        return emptyList<CalibrationItem>() to null
+        return FinanceReportLocator.walkRecentDays(today, 0..7) { d ->
+            FinanceReportLocator.readReport(financeDir, "daily-review", d)
+                ?.let { parseFromMarkdown(it, reviewedDate = d) }
+                ?.takeIf { it.second != null }
+        } ?: (emptyList<CalibrationItem>() to null)
     }
 
     @Suppress("UNCHECKED_CAST")
     private fun parseFromMarkdown(md: String, reviewedDate: LocalDate): Pair<List<CalibrationItem>, CalibrationSummary?> {
-        val yaml = FinanceReportYaml.extractLastYamlBlock(md) ?: return emptyList<CalibrationItem>() to null
-        val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-        val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+        val snap = FinanceReportYaml.readJudgmentSnapshot(md) ?: return emptyList<CalibrationItem>() to null
         val cal = FinanceReportYaml.mapAt(snap, "calibration") ?: return emptyList<CalibrationItem>() to null
 
         val items = ArrayList<CalibrationItem>()

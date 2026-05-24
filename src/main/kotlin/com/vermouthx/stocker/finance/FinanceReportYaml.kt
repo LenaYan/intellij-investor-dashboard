@@ -1,5 +1,8 @@
 package com.vermouthx.stocker.finance
 
+import java.nio.file.Files
+import java.nio.file.Path
+
 /**
  * Minimal YAML extractor for finance/ project reports.
  *
@@ -183,5 +186,48 @@ internal object FinanceReportYaml {
             cur = (cur as Map<String, Any?>)[p]
         }
         return cur as? List<Any?>
+    }
+
+    /** Scalar accessor: `(snap["main_thread"] as? String)?.takeIf { it.isNotBlank() }` collapsed. */
+    fun stringAt(map: Map<String, Any?>, key: String): String? =
+        (map[key] as? String)?.takeIf { it.isNotBlank() }
+
+    /** Numeric accessor that coerces Int/Long/Double/String, returning null on miss. */
+    fun doubleAt(map: Map<String, Any?>, key: String): Double? = when (val v = map[key]) {
+        is Double -> v
+        is Int -> v.toDouble()
+        is Long -> v.toDouble()
+        is String -> v.toDoubleOrNull()
+        else -> null
+    }
+
+    /** Like [doubleAt] but rounded to Int. */
+    fun intAt(map: Map<String, Any?>, key: String): Int? = when (val v = map[key]) {
+        is Int -> v
+        is Long -> v.toInt()
+        is Double -> v.toInt()
+        is String -> v.toIntOrNull() ?: v.toDoubleOrNull()?.toInt()
+        else -> null
+    }
+
+    /**
+     * Read a finance/ report file and return the `judgment_snapshot` block from its trailing
+     * YAML fence, or the YAML root if no such key exists. Returns null when the YAML is
+     * missing or unparseable — collapses the repeated 3-line pattern at 11+ call sites.
+     */
+    fun readJudgmentSnapshot(md: String): Map<String, Any?>? {
+        val yaml = extractLastYamlBlock(md) ?: return null
+        val tree = parseSimpleYaml(yaml)
+        return mapAt(tree, "judgment_snapshot") ?: tree
+    }
+
+    /** [readJudgmentSnapshot] for a path; returns null on I/O failure or missing YAML. */
+    fun readJudgmentSnapshot(path: Path): Map<String, Any?>? {
+        if (!Files.isRegularFile(path)) return null
+        return try {
+            readJudgmentSnapshot(Files.readString(path))
+        } catch (_: Exception) {
+            null
+        }
     }
 }

@@ -62,7 +62,7 @@ class FinanceBridgeService : Disposable {
         if (refreshListeners.isEmpty()) return
         SwingUtilities.invokeLater {
             refreshListeners.forEach { l ->
-                try { l() } catch (_: Throwable) { /* keep going */ }
+                try { l() } catch (e: Exception) { log.warn("finance refresh listener threw", e) }
             }
         }
     }

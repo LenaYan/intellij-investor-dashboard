@@ -43,11 +43,8 @@ internal object FinanceCanonicalThreads {
                         val name = p.fileName.toString()
                         if (!name.endsWith(".md")) return@forEach
                         val agent = name.removeSuffix(".md")
-                        val md = try { Files.readString(p) } catch (_: Exception) { return@forEach }
-                        val yaml = FinanceReportYaml.extractLastYamlBlock(md) ?: return@forEach
-                        val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-                        val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
-                        val mt = (snap["main_thread"] as? String)?.takeIf { it.isNotBlank() } ?: return@forEach
+                        val snap = FinanceReportYaml.readJudgmentSnapshot(p) ?: return@forEach
+                        val mt = FinanceReportYaml.stringAt(snap, "main_thread") ?: return@forEach
                         val norm = normalize(mt)
                         val bucket = seenByNorm.getOrPut(norm) { LinkedHashMap() }
                         bucket.getOrPut(mt) { ArrayList() }.add(agent)

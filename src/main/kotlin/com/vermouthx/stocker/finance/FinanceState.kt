@@ -135,14 +135,8 @@ class FinanceState {
 
         val events = FinanceEventCalendar.loadFromReports(financeDir, today)
         val marketSnap = FinanceMarketSnapshotParser.parseFromMarketResearch(financeDir, today)
-            ?: run {
-                // fallback to previous trading day
-                var s: FinanceMarketSnapshot? = null
-                for (b in 1..3) {
-                    s = FinanceMarketSnapshotParser.parseFromMarketResearch(financeDir, today.minusDays(b.toLong()))
-                    if (s != null) break
-                }
-                s
+            ?: FinanceReportLocator.walkRecentDays(today, 1..3) { d ->
+                FinanceMarketSnapshotParser.parseFromMarketResearch(financeDir, d)
             }
 
         // entry-timing: today's grades + triggers + invalidations
@@ -208,13 +202,11 @@ class FinanceState {
         for (b in 0..5) {
             val d = today.minusDays(b.toLong())
             val md = FinanceReportLocator.readReport(financeDir, "macro-radar", d) ?: continue
-            val yaml = FinanceReportYaml.extractLastYamlBlock(md)
-            if (yaml != null) {
-                val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-                val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
-                val direct = (snap["liquidity_env"] as? String)?.takeIf { it.isNotBlank() }
-                    ?: (snap["liquidity_environment"] as? String)?.takeIf { it.isNotBlank() }
-                    ?: (FinanceReportYaml.mapAt(snap, "macro")?.get("liquidity_env") as? String)?.takeIf { it.isNotBlank() }
+            val snap = FinanceReportYaml.readJudgmentSnapshot(md)
+            if (snap != null) {
+                val direct = FinanceReportYaml.stringAt(snap, "liquidity_env")
+                    ?: FinanceReportYaml.stringAt(snap, "liquidity_environment")
+                    ?: FinanceReportYaml.mapAt(snap, "macro")?.let { FinanceReportYaml.stringAt(it, "liquidity_env") }
                 if (direct != null) return direct
                 // Title fallback: "宏观雷达 -- 流动性中性偏紧，边际恶化中"
                 val title = (snap["title"] as? String) ?: ""
@@ -242,29 +234,21 @@ class FinanceState {
      */
     private fun readAllScenarioTrees(financeDir: Path, today: LocalDate): Map<String, ThreadScenarioTree> {
         val out = LinkedHashMap<String, ThreadScenarioTree>()
-        for (b in 0..5) {
-            val d = today.minusDays(b.toLong())
+        return FinanceReportLocator.walkRecentDays(today, 0..5) { d ->
             val day = financeDir.resolve("reports").resolve(d.toString())
 
             // 1) market-research primary tree
             if (out.isEmpty()) {  // only take from the most-recent day that has anything
                 val mr = day.resolve("market-research.md")
                 if (Files.isRegularFile(mr)) {
-                    parseMarketResearchTree(mr)?.let { (label, tree) ->
-                        out[label] = tree
-                    }
+                    parseMarketResearchTree(mr)?.let { (label, tree) -> out[label] = tree }
                 }
             }
 
             // 2) thread-tracker per-active-thread trees
             val tt = day.resolve("thread-tracker.md")
             if (Files.isRegularFile(tt)) {
-                val ttTrees = parseThreadTrackerTrees(tt)
-                if (ttTrees.isNotEmpty()) {
-                    ttTrees.forEach { (label, tree) ->
-                        out.putIfAbsent(label, tree)
-                    }
-                }
+                parseThreadTrackerTrees(tt).forEach { (label, tree) -> out.putIfAbsent(label, tree) }
             }
 
             // 3) theme-incubator candidate themes → synthetic 2-branch trees (A 点火 / B 证伪)
@@ -272,37 +256,26 @@ class FinanceState {
             //    rather than active threads.
             val ti = day.resolve("theme-incubator.md")
             if (Files.isRegularFile(ti)) {
-                val incTrees = parseIncubatorCandidates(ti)
-                incTrees.forEach { (label, tree) ->
-                    out.putIfAbsent(label, tree)
-                }
+                parseIncubatorCandidates(ti).forEach { (label, tree) -> out.putIfAbsent(label, tree) }
             }
 
             // 4) position-risk-monitor position_scenarios → per-position scenario trees
             //    Labeled "💼 <position name>" for "I hold this, when do I reduce / exit"
             val pr = day.resolve("position-risk-monitor.md")
             if (Files.isRegularFile(pr)) {
-                val posTrees = parsePositionScenarios(pr)
-                posTrees.forEach { (label, tree) ->
-                    out.putIfAbsent(label, tree)
-                }
+                parsePositionScenarios(pr).forEach { (label, tree) -> out.putIfAbsent(label, tree) }
             }
-            if (out.isNotEmpty()) return out
-        }
-        return out
+            out.takeIf { it.isNotEmpty() }
+        } ?: out
     }
 
-    private fun parseMarketResearchTree(path: Path): Pair<String, ThreadScenarioTree>? = try {
-        val yaml = FinanceReportYaml.extractLastYamlBlock(Files.readString(path)) ?: return null
-        val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-        val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+    private fun parseMarketResearchTree(path: Path): Pair<String, ThreadScenarioTree>? {
+        val snap = FinanceReportYaml.readJudgmentSnapshot(path) ?: return null
         val parsed = FinanceScenarioTreeParser.fromYaml(snap) ?: return null
-        val label = (snap["main_thread"] as? String)?.takeIf { it.isNotBlank() }
+        val label = FinanceReportYaml.stringAt(snap, "main_thread")
             ?: parsed.leaderName
             ?: parsed.leaderSymbol
-        label to parsed
-    } catch (_: Exception) {
-        null
+        return label to parsed
     }
 
     /**
@@ -320,9 +293,7 @@ class FinanceState {
     private fun parseIncubatorCandidates(path: Path): Map<String, ThreadScenarioTree> {
         val out = LinkedHashMap<String, ThreadScenarioTree>()
         try {
-            val yaml = FinanceReportYaml.extractLastYamlBlock(Files.readString(path)) ?: return out
-            val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-            val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+            val snap = FinanceReportYaml.readJudgmentSnapshot(path) ?: return out
             val candidates = snap["candidate_themes"] as? List<Any?> ?: return out
             candidates.forEach { item ->
                 if (item !is Map<*, *>) return@forEach
@@ -330,11 +301,11 @@ class FinanceState {
                 val themeName = (m["theme"] as? String)?.takeIf { it.isNotBlank() } ?: return@forEach
                 val ignition = m["ignition_struct"] as? Map<String, Any?> ?: return@forEach
                 val leaderSym = (ignition["leader_symbol"] as? String)?.takeIf { it.isNotBlank() } ?: return@forEach
-                val leaderRef = asDouble(ignition["leader_ref_price"]) ?: return@forEach
-                val ignVal = asDouble(ignition["value"]) ?: return@forEach
+                val leaderRef = FinanceReportYaml.doubleAt(ignition, "leader_ref_price") ?: return@forEach
+                val ignVal = FinanceReportYaml.doubleAt(ignition, "value") ?: return@forEach
 
                 val invalidation = m["invalidation_struct"] as? Map<String, Any?>
-                val confidenceEmerge = asDouble(m["confidence_emerge"]) ?: 5.0
+                val confidenceEmerge = FinanceReportYaml.doubleAt(m, "confidence_emerge") ?: 5.0
                 val igniteProb = (confidenceEmerge / 10.0).coerceIn(0.1, 0.9)
 
                 val branches = ArrayList<ScenarioBranch>(2)
@@ -350,14 +321,14 @@ class FinanceState {
                         priceTriggerLow = null,
                         priceTriggerHigh = null,
                         priceTriggerDays = null,
-                        volumeYiGte = asDouble(ignition["volume_yi_gte"]),
+                        volumeYiGte = FinanceReportYaml.doubleAt(ignition, "volume_yi_gte"),
                         nextPhase = "发酵",
                         confidence = igniteProb,
                         action = ignition["action"] as? String,
                     )
                 )
                 if (invalidation != null) {
-                    val invVal = asDouble(invalidation["value"])
+                    val invVal = FinanceReportYaml.doubleAt(invalidation, "value")
                     if (invVal != null && invVal > 0) {
                         branches.add(
                             ScenarioBranch(
@@ -401,14 +372,6 @@ class FinanceState {
         return out
     }
 
-    private fun asDouble(v: Any?): Double? = when (v) {
-        is Double -> v
-        is Int -> v.toDouble()
-        is Long -> v.toDouble()
-        is String -> v.toDoubleOrNull()
-        else -> null
-    }
-
     /**
      * Parse position-risk-monitor.md `position_scenarios[]`. Each entry is a full
      * scenario_tree (same schema as §4.1.5) and gets labeled "💼 <name>" so the
@@ -421,9 +384,7 @@ class FinanceState {
     private fun parsePositionScenarios(path: Path): Map<String, ThreadScenarioTree> {
         val out = LinkedHashMap<String, ThreadScenarioTree>()
         try {
-            val yaml = FinanceReportYaml.extractLastYamlBlock(Files.readString(path)) ?: return out
-            val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-            val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+            val snap = FinanceReportYaml.readJudgmentSnapshot(path) ?: return out
             val positions = snap["position_scenarios"] as? List<Any?> ?: return out
             positions.forEach { item ->
                 if (item !is Map<*, *>) return@forEach
@@ -446,9 +407,7 @@ class FinanceState {
     private fun parseThreadTrackerTrees(path: Path): Map<String, ThreadScenarioTree> {
         val out = LinkedHashMap<String, ThreadScenarioTree>()
         try {
-            val yaml = FinanceReportYaml.extractLastYamlBlock(Files.readString(path)) ?: return out
-            val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-            val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+            val snap = FinanceReportYaml.readJudgmentSnapshot(path) ?: return out
             val actives = snap["active_threads"] as? List<Any?> ?: return out
             actives.forEach { item ->
                 if (item !is Map<*, *>) return@forEach
@@ -534,17 +493,12 @@ class FinanceState {
     /** Read main_thread/phase/age/leader/health from market-research.md YAML of a given date. */
     private fun readThreadSnapshot(financeDir: Path, date: LocalDate): ThreadSnapshot {
         val mrPath = financeDir.resolve("reports").resolve(date.toString()).resolve("market-research.md")
-        if (!Files.isRegularFile(mrPath)) return ThreadSnapshot(null, null, null, null, null, null)
-        val yaml = FinanceReportYaml.extractLastYamlBlock(Files.readString(mrPath))
+        val snap = FinanceReportYaml.readJudgmentSnapshot(mrPath)
             ?: return ThreadSnapshot(null, null, null, null, null, null)
-        val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-        val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
         val mainThread = snap["main_thread"] as? String
         val phase = snap["thread_phase"] as? String
-        val ageDays = (snap["thread_age_days"] as? Int)
-            ?: (snap["thread_age_days"] as? Double)?.toInt()
-        val healthScore = (snap["thread_health_score"] as? Int)
-            ?: (snap["thread_health_score"] as? Double)?.toInt()
+        val ageDays = FinanceReportYaml.intAt(snap, "thread_age_days")
+        val healthScore = FinanceReportYaml.intAt(snap, "thread_health_score")
 
         // leader: prefer `current_leader` scalar, else top of `leader_rotation` list's `current`,
         // else first item in `leaders` list, else null.
@@ -582,14 +536,10 @@ class FinanceState {
     }
 
     /** Walk back up to 7 days to find the prior trading day's thread snapshot. */
-    private fun readPriorThreadSnapshot(financeDir: Path, today: LocalDate): ThreadSnapshot {
-        for (b in 1..7) {
-            val d = today.minusDays(b.toLong())
-            val ts = readThreadSnapshot(financeDir, d)
-            if (ts.phase != null || ts.mainThread != null) return ts
-        }
-        return ThreadSnapshot(null, null, null, null, null, null)
-    }
+    private fun readPriorThreadSnapshot(financeDir: Path, today: LocalDate): ThreadSnapshot =
+        FinanceReportLocator.walkRecentDays(today, 1..7) { d ->
+            readThreadSnapshot(financeDir, d).takeIf { it.phase != null || it.mainThread != null }
+        } ?: ThreadSnapshot(null, null, null, null, null, null)
 
     /** Latest [lookbackDays] thread_health_score values, oldest → newest. */
     private fun readThreadHealthSeries(financeDir: Path, today: LocalDate, lookbackDays: Int): List<Int> {
@@ -602,21 +552,17 @@ class FinanceState {
         return out
     }
 
-    private fun fallbackHealth(financeDir: Path, today: LocalDate): Map<String, Health> {
-        for (back in 1..5) {
-            val d = today.minusDays(back.toLong())
+    private fun fallbackHealth(financeDir: Path, today: LocalDate): Map<String, Health> =
+        FinanceReportLocator.walkRecentDays(today, 1..5) { d ->
             val p = financeDir.resolve("reports").resolve(d.toString()).resolve("position-risk-monitor.md")
-            if (Files.isRegularFile(p)) {
-                val m = LinkedHashMap<String, Health>()
-                try {
-                    extractHealthFromRiskReport(Files.readString(p), m)
-                } catch (_: Exception) {
-                }
-                if (m.isNotEmpty()) return m
+            if (!Files.isRegularFile(p)) return@walkRecentDays null
+            val m = LinkedHashMap<String, Health>()
+            try {
+                extractHealthFromRiskReport(Files.readString(p), m)
+            } catch (_: Exception) {
             }
-        }
-        return emptyMap()
-    }
+            m.takeIf { it.isNotEmpty() }
+        } ?: emptyMap()
 
     /**
      * Build per-symbol health from the YAML block of a position-risk-monitor.md.
@@ -631,19 +577,16 @@ class FinanceState {
      *   - if `portfolio_health` is "警戒", upgrade GREEN to YELLOW for anyone unspecified
      */
     private fun extractHealthFromRiskReport(md: String, out: MutableMap<String, Health>) {
-        val yaml = FinanceReportYaml.extractLastYamlBlock(md) ?: return
-        val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-        val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+        val snap = FinanceReportYaml.readJudgmentSnapshot(md) ?: return
 
         // 1) thesis_drift => default GREEN for everyone listed
         @Suppress("UNCHECKED_CAST")
         val drift = snap["thesis_drift"] as? List<Any?>
         drift?.forEach { item ->
             if (item is Map<*, *>) {
-                val sym = item["symbol"]?.toString() ?: return@forEach
-                val score = (item["drift_score"] as? Int)
-                    ?: (item["drift_score"] as? Double)?.toInt()
-                    ?: 0
+                @Suppress("UNCHECKED_CAST") val m = item as Map<String, Any?>
+                val sym = m["symbol"]?.toString() ?: return@forEach
+                val score = FinanceReportYaml.intAt(m, "drift_score") ?: 0
                 val key = FinanceSymbol.normalize(sym)
                 out[key] = when {
                     score >= 3 -> Health.RED

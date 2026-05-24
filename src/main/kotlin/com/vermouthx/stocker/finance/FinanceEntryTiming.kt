@@ -133,9 +133,7 @@ internal object FinanceEntryTimingParser {
 
     /** Parse entry-timing.md content; returns list of recommendations or empty. */
     fun parse(markdown: String): List<EntryTimingRecommendation> {
-        val yaml = FinanceReportYaml.extractLastYamlBlock(markdown) ?: return emptyList()
-        val tree = FinanceReportYaml.parseSimpleYaml(yaml)
-        val snap = FinanceReportYaml.mapAt(tree, "judgment_snapshot") ?: tree
+        val snap = FinanceReportYaml.readJudgmentSnapshot(markdown) ?: return emptyList()
         @Suppress("UNCHECKED_CAST")
         val list = snap["recommendations"] as? List<Any?> ?: return emptyList()
         val out = ArrayList<EntryTimingRecommendation>()
@@ -149,15 +147,15 @@ internal object FinanceEntryTimingParser {
                 symbol = sym,
                 normalizedKey = FinanceSymbol.normalize(sym),
                 name = m["name"] as? String,
-                totalScore = asInt(m["total_score"]),
+                totalScore = FinanceReportYaml.intAt(m, "total_score"),
                 grade = m["grade"] as? String,
                 entryType = m["entry_type"] as? String,
-                resonanceScore = asInt(m["resonance_score"]),
-                positionScore = asInt(m["position_score"]),
+                resonanceScore = FinanceReportYaml.intAt(m, "resonance_score"),
+                positionScore = FinanceReportYaml.intAt(m, "position_score"),
                 eventState = m["event_state"] as? String,
                 alignedThread = m["aligned_thread"] as? String,
                 threadPhase = m["thread_phase"] as? String,
-                firstPositionPct = asInt(m["first_position_pct"]),
+                firstPositionPct = FinanceReportYaml.intAt(m, "first_position_pct"),
                 addSchedule = m["add_schedule"] as? String,
                 triggers = asStringList(m["triggers"]),
                 invalidations = asStringList(m["invalidations"]),
@@ -166,21 +164,6 @@ internal object FinanceEntryTimingParser {
             )
         }
         return out
-    }
-
-    private fun asInt(v: Any?): Int? = when (v) {
-        is Int -> v
-        is Double -> v.toInt()
-        is String -> v.toIntOrNull()
-        else -> null
-    }
-
-    private fun asDouble(v: Any?): Double? = when (v) {
-        is Double -> v
-        is Int -> v.toDouble()
-        is Long -> v.toDouble()
-        is String -> v.toDoubleOrNull()
-        else -> null
     }
 
     private fun asStringList(v: Any?): List<String> {
@@ -202,11 +185,11 @@ internal object FinanceEntryTimingParser {
             val type = (m["type"] as? String)?.lowercase()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             EntryTimingStructTrigger(
                 type = type,
-                value = asDouble(m["value"]),
-                low = asDouble(m["low"]),
-                high = asDouble(m["high"]),
+                value = FinanceReportYaml.doubleAt(m, "value"),
+                low = FinanceReportYaml.doubleAt(m, "low"),
+                high = FinanceReportYaml.doubleAt(m, "high"),
                 action = m["action"] as? String,
-                positionPct = asInt(m["position_pct"]),
+                positionPct = FinanceReportYaml.intAt(m, "position_pct"),
                 description = m["description"] as? String,
             )
         }
@@ -219,13 +202,10 @@ internal object FinanceEntryTimingLoader {
     fun loadFromReports(
         financeDir: Path,
         today: LocalDate = FinanceReportLocator.today(),
-    ): List<EntryTimingRecommendation> {
-        for (b in 0..5) {
-            val d = today.minusDays(b.toLong())
-            val md = FinanceReportLocator.readReport(financeDir, "entry-timing", d) ?: continue
-            val parsed = FinanceEntryTimingParser.parse(md)
-            if (parsed.isNotEmpty()) return parsed
-        }
-        return emptyList()
-    }
+    ): List<EntryTimingRecommendation> =
+        FinanceReportLocator.walkRecentDays(today, 0..5) { d ->
+            FinanceReportLocator.readReport(financeDir, "entry-timing", d)
+                ?.let { FinanceEntryTimingParser.parse(it) }
+                ?.takeIf { it.isNotEmpty() }
+        }.orEmpty()
 }

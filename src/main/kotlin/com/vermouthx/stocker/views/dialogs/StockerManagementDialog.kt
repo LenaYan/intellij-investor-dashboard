@@ -16,6 +16,7 @@ import com.vermouthx.stocker.StockerAppManager
 import com.vermouthx.stocker.entities.StockerQuote
 import com.vermouthx.stocker.enums.StockerMarketType
 import com.vermouthx.stocker.settings.StockerSetting
+import com.vermouthx.stocker.utils.StockerNumberFormat
 import com.vermouthx.stocker.utils.StockerPinyinUtil
 import com.vermouthx.stocker.utils.StockerQuoteHttpUtil
 import com.vermouthx.stocker.views.StockerTableView
@@ -203,7 +204,7 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
                         preferredSize = java.awt.Dimension(120, preferredSize.height)
                     }
                     label(
-                        costPrice?.let { String.format("%.3f", it) } ?: "-"
+                        StockerNumberFormat.formatPrice(costPrice)
                     ).applyToComponent {
                         minimumSize = java.awt.Dimension(80, 0)
                         preferredSize = java.awt.Dimension(80, preferredSize.height)

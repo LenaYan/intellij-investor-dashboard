@@ -20,6 +20,7 @@ import com.vermouthx.stocker.enums.StockerTableColumn;
 import com.vermouthx.stocker.finance.FinanceWatchlistActions;
 import com.vermouthx.stocker.settings.StockerSetting;
 import com.vermouthx.stocker.utils.StockerActionUtil;
+import com.vermouthx.stocker.utils.StockerNumberFormat;
 import com.vermouthx.stocker.utils.StockerPinyinUtil;
 
 import javax.swing.*;
@@ -427,14 +428,14 @@ public class StockerTableView implements Disposable {
         entryTimingItem.addActionListener(e -> showSelectedEntryTimingPlan());
 
         // View bull-bear debate (reads ~/Claude/finance/reports/<today>/bull-bear-<symbol>.md)
-        JMenuItem bullBearItem = new JMenuItem("查看多空辩论 (bull-bear)");
+        JMenuItem bullBearItem = new JMenuItem(StockerBundle.message("menu.view.bull.bear"));
         bullBearItem.setOpaque(true);
         bullBearItem.setRolloverEnabled(true);
         bullBearItem.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
         bullBearItem.addActionListener(e -> showSelectedBullBear());
 
         // View style jury (reads ~/Claude/finance/reports/<today>/style-jury-<symbol>.md)
-        JMenuItem styleJuryItem = new JMenuItem("查看风格投票 (style-jury)");
+        JMenuItem styleJuryItem = new JMenuItem(StockerBundle.message("menu.view.style.jury"));
         styleJuryItem.setOpaque(true);
         styleJuryItem.setRolloverEnabled(true);
         styleJuryItem.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
@@ -502,135 +503,71 @@ public class StockerTableView implements Disposable {
         return popupMenu;
     }
 
-    private void showSelectedBullBear() {
-        String code = popupTargetCode;
-        String name = popupTargetName;
-        if (code == null) {
-            int selectedRow = tbBody.getSelectedRow();
-            if (selectedRow < 0) {
-                clearPopupTarget();
-                return;
+    /**
+     * Resolve (code, name) from the popup target (if a right-click set them) or from the
+     * currently selected row, then hand them to [action]. Clears popup state in all paths,
+     * including when no row is resolvable. The 6 popup actions previously open-coded this.
+     */
+    private void withSelectedRow(java.util.function.BiConsumer<String, String> action) {
+        try {
+            String code = popupTargetCode;
+            String name = popupTargetName;
+            if (code == null) {
+                int selectedRow = tbBody.getSelectedRow();
+                if (selectedRow < 0) return;
+                code = getStringValueAt(selectedRow, 0);
+                name = getStringValueAt(selectedRow, 1);
             }
-            code = getStringValueAt(selectedRow, 0);
-            name = getStringValueAt(selectedRow, 1);
-        }
-        if (code == null) {
+            if (code == null) return;
+            action.accept(code, name);
+        } finally {
             clearPopupTarget();
-            return;
         }
-        com.vermouthx.stocker.finance.FinanceReportActions.showBullBear(tbBody, code, name);
-        clearPopupTarget();
+    }
+
+    private void showSelectedBullBear() {
+        withSelectedRow((code, name) ->
+            com.vermouthx.stocker.finance.FinanceReportActions.showBullBear(tbBody, code, name));
     }
 
     private void showSelectedStyleJury() {
-        String code = popupTargetCode;
-        String name = popupTargetName;
-        if (code == null) {
-            int selectedRow = tbBody.getSelectedRow();
-            if (selectedRow < 0) {
-                clearPopupTarget();
-                return;
-            }
-            code = getStringValueAt(selectedRow, 0);
-            name = getStringValueAt(selectedRow, 1);
-        }
-        if (code == null) {
-            clearPopupTarget();
-            return;
-        }
-        com.vermouthx.stocker.finance.FinanceReportActions.showStyleJury(tbBody, code, name);
-        clearPopupTarget();
+        withSelectedRow((code, name) ->
+            com.vermouthx.stocker.finance.FinanceReportActions.showStyleJury(tbBody, code, name));
     }
 
     private void showSelectedEntryTimingPlan() {
-        String code = popupTargetCode;
-        String name = popupTargetName;
-        if (code == null) {
-            int selectedRow = tbBody.getSelectedRow();
-            if (selectedRow < 0) {
-                clearPopupTarget();
-                return;
-            }
-            code = getStringValueAt(selectedRow, 0);
-            name = getStringValueAt(selectedRow, 1);
-        }
-        if (code == null) {
-            clearPopupTarget();
-            return;
-        }
-        com.vermouthx.stocker.finance.FinanceEntryTimingActions.showPopup(tbBody, code, name);
-        clearPopupTarget();
+        withSelectedRow((code, name) ->
+            com.vermouthx.stocker.finance.FinanceEntryTimingActions.showPopup(tbBody, code, name));
     }
 
     private void addSelectedToClaudeWatchlist() {
-        String code = popupTargetCode;
-        String name = popupTargetName;
-        if (code == null) {
-            int selectedRow = tbBody.getSelectedRow();
-            if (selectedRow < 0) {
-                clearPopupTarget();
-                return;
-            }
-            code = getStringValueAt(selectedRow, 0);
-            name = getStringValueAt(selectedRow, 1);
-        }
-        if (code == null) {
-            clearPopupTarget();
-            return;
-        }
-        // Find current price from row (column 2)
-        int row = tbBody.getSelectedRow();
-        Double refPrice = null;
-        if (row >= 0) {
-            try {
+        withSelectedRow((code, name) -> {
+            // Find current price from the selected row (column 2 in the model).
+            int row = tbBody.getSelectedRow();
+            Double refPrice = null;
+            if (row >= 0) {
                 Object v = tbModel.getValueAt(row, 2);
                 if (v != null) refPrice = parseDouble(v);
-            } catch (Exception ignored) {
             }
-        }
-        FinanceWatchlistActions.addToWatchlist(code, name, refPrice);
-        clearPopupTarget();
+            FinanceWatchlistActions.addToWatchlist(code, name, refPrice);
+        });
     }
 
     private void toggleFocusSelectedStock() {
-        String code = popupTargetCode;
-        if (code == null) {
-            int selectedRow = tbBody.getSelectedRow();
-            if (selectedRow >= 0) {
-                code = getStringValueAt(selectedRow, 0);
-            }
-        }
-        if (code != null) {
+        withSelectedRow((code, name) -> {
             StockerSetting.Companion.getInstance().toggleFocusStock(code);
             tbBody.repaint();
-        }
-        clearPopupTarget();
+        });
     }
 
     private void deleteSelectedStock() {
-        String code = popupTargetCode;
-        String name = popupTargetName;
-        if (code == null) {
-            int selectedRow = tbBody.getSelectedRow();
-            if (selectedRow < 0) {
-                clearPopupTarget();
-                return;
-            }
-            code = getStringValueAt(selectedRow, 0);
-            name = getStringValueAt(selectedRow, 1);
-        }
-        if (code == null) {
-            clearPopupTarget();
-            return;
-        }
-        StockerSetting setting = StockerSetting.Companion.getInstance();
-        StockerMarketType market = setting.marketOf(code);
-        if (market == null) {
-            clearPopupTarget();
-            return;
-        }
-        StockerActionUtil.removeStock(market, new StockerSuggestion(code, name == null ? code : name, market));
-        clearPopupTarget();
+        withSelectedRow((code, name) -> {
+            StockerSetting setting = StockerSetting.Companion.getInstance();
+            StockerMarketType market = setting.marketOf(code);
+            if (market == null) return;
+            StockerActionUtil.removeStock(market,
+                new StockerSuggestion(code, name == null ? code : name, market));
+        });
     }
 
     private String getStringValueAt(int row, int column) {
@@ -760,80 +697,31 @@ public class StockerTableView implements Disposable {
 
             Double costPrice = setting.getCostPrice(code);
             Integer holdings = setting.getHoldings(code);
-            tbModel.setValueAt(formatCostPrice(costPrice), row, costPriceColumnIndex);
-            tbModel.setValueAt(formatHoldings(holdings), row, holdingsColumnIndex);
+            tbModel.setValueAt(StockerNumberFormat.formatPrice(costPrice), row, costPriceColumnIndex);
+            tbModel.setValueAt(StockerNumberFormat.formatHoldings(holdings), row, holdingsColumnIndex);
 
             Double currentPrice = parseDouble(tbModel.getValueAt(row, currentColumnIndex));
-            tbModel.setValueAt(formatNetProfit(currentPrice, costPrice, holdings), row, netProfitColumnIndex);
+            tbModel.setValueAt(StockerNumberFormat.formatNetProfit(currentPrice, costPrice, holdings),
+                row, netProfitColumnIndex);
         }
 
         tbModel.fireTableDataChanged();
     }
 
-    private static String formatCostPrice(Double costPrice) {
-        return costPrice != null ? String.format("%.3f", costPrice) : "-";
-    }
-
-    private static Object formatHoldings(Integer holdings) {
-        return holdings != null ? holdings : "-";
-    }
-
-    private static Object formatNetProfit(Double currentPrice, Double costPrice, Integer holdings) {
-        if (currentPrice == null || costPrice == null || holdings == null) {
-            return "-";
-        }
-        return String.format("%.3f", (currentPrice - costPrice) * holdings);
-    }
-
     private void applyColumnRenderers() {
-        TableColumn code = getColumnIfPresent(codeColumn);
-        if (code != null) {
-            code.setCellRenderer(codeRenderer);
-        }
-        TableColumn name = getColumnIfPresent(nameColumn);
-        if (name != null) {
-            name.setCellRenderer(defaultRenderer);
-        }
-        TableColumn current = getColumnIfPresent(currentColumn);
-        if (current != null) {
-            current.setCellRenderer(numericRenderer);
-        }
-        TableColumn opening = getColumnIfPresent(openingColumn);
-        if (opening != null) {
-            opening.setCellRenderer(numericRenderer);
-        }
-        TableColumn close = getColumnIfPresent(closeColumn);
-        if (close != null) {
-            close.setCellRenderer(numericRenderer);
-        }
-        TableColumn low = getColumnIfPresent(lowColumn);
-        if (low != null) {
-            low.setCellRenderer(numericRenderer);
-        }
-        TableColumn high = getColumnIfPresent(highColumn);
-        if (high != null) {
-            high.setCellRenderer(numericRenderer);
-        }
-        TableColumn change = getColumnIfPresent(changeColumn);
-        if (change != null) {
-            change.setCellRenderer(changeRenderer);
-        }
-        TableColumn percent = getColumnIfPresent(percentColumn);
-        if (percent != null) {
-            percent.setCellRenderer(percentRenderer);
-        }
-        TableColumn costPrice = getColumnIfPresent(costPriceColumn);
-        if (costPrice != null) {
-            costPrice.setCellRenderer(costRenderer);
-        }
-        TableColumn holdings = getColumnIfPresent(holdingsColumn);
-        if (holdings != null) {
-            holdings.setCellRenderer(numericRenderer);
-        }
-        TableColumn netProfit = getColumnIfPresent(netProfitColumn);
-        if (netProfit != null) {
-            netProfit.setCellRenderer(netProfitRenderer);
-        }
+        applyRenderer(codeColumn, codeRenderer);
+        applyRenderer(nameColumn, defaultRenderer);
+        applyRenderer(currentColumn, numericRenderer);
+        applyRenderer(openingColumn, numericRenderer);
+        applyRenderer(closeColumn, numericRenderer);
+        applyRenderer(lowColumn, numericRenderer);
+        applyRenderer(highColumn, numericRenderer);
+        applyRenderer(changeColumn, changeRenderer);
+        applyRenderer(percentColumn, percentRenderer);
+        applyRenderer(costPriceColumn, costRenderer);
+        applyRenderer(holdingsColumn, numericRenderer);
+        applyRenderer(netProfitColumn, netProfitRenderer);
+
         TableColumn sparkline = getColumnIfPresent(sparklineColumn);
         if (sparkline != null) {
             sparkline.setCellRenderer(sparklineRenderer);
@@ -855,6 +743,11 @@ public class StockerTableView implements Disposable {
         }
     }
 
+    private void applyRenderer(String columnIdentifier, javax.swing.table.TableCellRenderer renderer) {
+        TableColumn col = getColumnIfPresent(columnIdentifier);
+        if (col != null) col.setCellRenderer(renderer);
+    }
+
     private TableColumn getColumnIfPresent(String identifier) {
         try {
             return tbBody.getColumn(identifier);
@@ -867,16 +760,6 @@ public class StockerTableView implements Disposable {
                 }
             }
             return null;
-        }
-    }
-
-    private void applyColorPatternToTable(Double value, DefaultTableCellRenderer renderer) {
-        if (value > 0) {
-            renderer.setForeground(upColor);
-        } else if (value < 0) {
-            renderer.setForeground(downColor);
-        } else {
-            renderer.setForeground(zeroColor);
         }
     }
 
@@ -954,15 +837,16 @@ public class StockerTableView implements Disposable {
         headerRenderer.setSortState(column, currentSortState);
         tbBody.getTableHeader().repaint();
 
-        // Sort the table data using optimized in-place sorting
-        sortTableDataOptimized(columnName, currentSortState);
+        sortTableData(columnName, currentSortState);
     }
 
     /**
-     * Optimized sorting that works with row indices instead of copying entire dataset.
-     * Backup data is only stored when sorting is active and cleared when returning to NONE state.
+     * Sort visible rows by `columnName` in the given direction, or restore the original order
+     * when state == NONE. Keeps a single backup of the unsorted row data while sorting is
+     * active so the user can cycle ASC→DESC→NONE without losing original order. Note: this
+     * does a full row-copy on each call; for very large tables consider a TableRowSorter.
      */
-    private void sortTableDataOptimized(String columnName, StockerSortState sortState) {
+    private void sortTableData(String columnName, StockerSortState sortState) {
         int rowCount = tbModel.getRowCount();
         if (rowCount == 0) {
             return;
@@ -1107,188 +991,83 @@ public class StockerTableView implements Disposable {
         }
     }
 
-    // Inner class for numeric columns (Current, Opening, Close, Low, High) with color coding based on percentage
+    /** Pick up/down/zero/default color for a possibly-null direction value. */
+    private Color signColor(Double value, Color fallback) {
+        if (value == null) return fallback;
+        if (value > 0) return upColor;
+        if (value < 0) return downColor;
+        return zeroColor;
+    }
+
+    /** Look up the (sibling) column's value on the same row, returns null on any miss. */
+    private Object siblingValue(JTable table, int row, String columnName) {
+        if (!(table.getModel() instanceof DefaultTableModel)) return null;
+        DefaultTableModel m = (DefaultTableModel) table.getModel();
+        int idx = m.findColumn(columnName);
+        if (idx < 0 || row < 0 || row >= m.getRowCount()) return null;
+        return m.getValueAt(row, idx);
+    }
+
+    // Numeric (Current, Opening, Close, Low, High) — color tracks the row's Change% column.
     private class NumericCellRenderer extends StockerDefaultTableCellRender {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            setHorizontalAlignment(DefaultTableCellRenderer.CENTER);
-            if (isSelected) {
-                return component;
-            }
-            if (isFocusedRow(table, row)) {
-                return component;
-            }
-            try {
-                int percentModelIndex = -1;
-                if (table.getModel() instanceof DefaultTableModel) {
-                    percentModelIndex = ((DefaultTableModel) table.getModel()).findColumn(percentColumn);
-                }
-                if (percentModelIndex != -1 && row >= 0 && row < table.getModel().getRowCount()) {
-                    Object percentValue = table.getModel().getValueAt(row, percentModelIndex);
-                    if (percentValue != null) {
-                        Double v = parsePercentage(percentValue.toString());
-                        if (v != null) {
-                            applyColorPatternToTable(v, this);
-                        } else {
-                            setForeground(table.getForeground());
-                        }
-                    } else {
-                        setForeground(table.getForeground());
-                    }
-                } else {
-                    setForeground(table.getForeground());
-                }
-            } catch (IllegalArgumentException e) {
-                setForeground(table.getForeground());
-            }
-            return component;
+            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            if (shouldSkipColoring(table, isSelected, row)) return c;
+            Object pct = siblingValue(table, row, percentColumn);
+            setForeground(signColor(pct == null ? null : parsePercentage(pct.toString()), table.getForeground()));
+            return c;
         }
     }
 
-    // Inner class for Change column renderer with color coding based on value sign
+    // Change column — color follows the value's sign.
     private class ChangeCellRenderer extends StockerDefaultTableCellRender {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            setHorizontalAlignment(DefaultTableCellRenderer.CENTER);
-            if (isSelected) {
-                return component;
-            }
-            if (isFocusedRow(table, row)) {
-                return component; // already yellow from super
-            }
-            if (value != null && !value.toString().isEmpty()) {
-                try {
-                    Double changeValue = parseDouble(value);
-                    if (changeValue != null) {
-                        if (changeValue > 0) {
-                            setForeground(upColor);
-                        } else if (changeValue < 0) {
-                            setForeground(downColor);
-                        } else {
-                            setForeground(zeroColor);
-                        }
-                    } else {
-                        setForeground(table.getForeground());
-                    }
-                } catch (Exception e) {
-                    setForeground(table.getForeground());
-                }
-            } else {
-                setForeground(table.getForeground());
-            }
-            return component;
+            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            if (shouldSkipColoring(table, isSelected, row)) return c;
+            setForeground(signColor(value == null ? null : parseDouble(value), table.getForeground()));
+            return c;
         }
     }
 
-    // Inner class for Change% column renderer with color coding
+    // Change% column — parse the "%" suffix and color by sign.
     private class PercentCellRenderer extends StockerDefaultTableCellRender {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            setHorizontalAlignment(DefaultTableCellRenderer.CENTER);
-            if (isSelected) {
-                return component;
-            }
-            if (isFocusedRow(table, row)) {
-                return component;
-            }
-            if (value == null) {
-                setForeground(table.getForeground());
-                return component;
-            }
-            try {
-                String percentValue = value.toString();
-                Double v = parsePercentage(percentValue);
-                if (v != null) {
-                    applyColorPatternToTable(v, this);
-                } else {
-                    setForeground(table.getForeground());
-                }
-            } catch (NumberFormatException e) {
-                setForeground(table.getForeground());
-            }
-            return component;
+            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            if (shouldSkipColoring(table, isSelected, row)) return c;
+            setForeground(signColor(value == null ? null : parsePercentage(value.toString()), table.getForeground()));
+            return c;
         }
     }
 
-    // Inner class for Cost column renderer with inverted color coding (cost > current = up color, cost < current = down color)
+    // Cost column — inverted: cost > current → down color (you're underwater on a position).
     private class CostCellRenderer extends StockerDefaultTableCellRender {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            setHorizontalAlignment(DefaultTableCellRenderer.CENTER);
-            if (isSelected) {
-                return component;
-            }
-            if (isFocusedRow(table, row)) {
-                return component;
-            }
-            if (value == null || value.toString().isEmpty()) {
+            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            if (shouldSkipColoring(table, isSelected, row)) return c;
+            Double cost = value == null ? null : parseDouble(value);
+            Object cur = siblingValue(table, row, currentColumn);
+            Double curPrice = cur == null ? null : parseDouble(cur);
+            if (cost == null || curPrice == null) {
                 setForeground(table.getForeground());
-                return component;
+            } else {
+                // negate so positive ⇒ down color (cost above current = position is losing)
+                setForeground(signColor(curPrice - cost, table.getForeground()));
             }
-            try {
-                Double costPrice = parseDouble(value);
-                if (costPrice == null) {
-                    setForeground(table.getForeground());
-                    return component;
-                }
-                int currentModelIndex = -1;
-                if (table.getModel() instanceof DefaultTableModel) {
-                    currentModelIndex = ((DefaultTableModel) table.getModel()).findColumn(currentColumn);
-                }
-                if (currentModelIndex != -1 && row >= 0 && row < table.getModel().getRowCount()) {
-                    Object currentValue = table.getModel().getValueAt(row, currentModelIndex);
-                    if (currentValue != null) {
-                        Double currentPrice = parseDouble(currentValue);
-                        if (currentPrice != null) {
-                            if (costPrice > currentPrice) {
-                                setForeground(downColor);
-                            } else if (costPrice < currentPrice) {
-                                setForeground(upColor);
-                            } else {
-                                setForeground(zeroColor);
-                            }
-                        } else {
-                            setForeground(table.getForeground());
-                        }
-                    } else {
-                        setForeground(table.getForeground());
-                    }
-                } else {
-                    setForeground(table.getForeground());
-                }
-            } catch (Exception e) {
-                setForeground(table.getForeground());
-            }
-            return component;
+            return c;
         }
     }
 
     private class NetProfitCellRenderer extends StockerDefaultTableCellRender {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-            Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            setHorizontalAlignment(DefaultTableCellRenderer.CENTER);
-            if (isSelected) {
-                return component;
-            }
-            if (isFocusedRow(table, row)) {
-                return component;
-            }
-            Double netProfit = parseDouble(value);
-            if (netProfit == null) {
-                setForeground(table.getForeground());
-            } else if (netProfit > 0) {
-                setForeground(upColor);
-            } else if (netProfit < 0) {
-                setForeground(downColor);
-            } else {
-                setForeground(zeroColor);
-            }
-            return component;
+            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            if (shouldSkipColoring(table, isSelected, row)) return c;
+            setForeground(signColor(parseDouble(value), table.getForeground()));
+            return c;
         }
     }
 

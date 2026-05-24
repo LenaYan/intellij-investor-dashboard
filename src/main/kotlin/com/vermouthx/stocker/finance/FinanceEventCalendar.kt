@@ -26,10 +26,9 @@ object FinanceEventCalendar {
         readMd(financeDir, "position-risk-monitor", date)?.let { collect(it, out) }
         // 7-day fallback so we don't blank out on weekends
         if (out.isEmpty()) {
-            for (b in 1..7) {
-                val d = date.minusDays(b.toLong())
+            FinanceReportLocator.walkRecentDays(date, 1..7) { d ->
                 readMd(financeDir, "earnings-tracker", d)?.let { collect(it, out) }
-                if (out.isNotEmpty()) break
+                out.takeIf { it.isNotEmpty() }
             }
         }
         return out

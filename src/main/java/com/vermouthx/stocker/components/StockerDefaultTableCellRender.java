@@ -62,4 +62,14 @@ public class StockerDefaultTableCellRender extends DefaultTableCellRenderer {
             setForeground(color);
         }
     }
+
+    /**
+     * Center-align the cell and short-circuit when no color logic should run
+     * (the row is selected, or focused — focus highlighting is already applied
+     * by the base renderer). Returns true if the subclass should `return` early.
+     */
+    protected boolean shouldSkipColoring(JTable table, boolean isSelected, int row) {
+        setHorizontalAlignment(SwingConstants.CENTER);
+        return isSelected || isFocusedRow(table, row);
+    }
 }

@@ -1,36 +1,29 @@
 package com.vermouthx.stocker.listeners;
 
 import com.vermouthx.stocker.entities.StockerQuote;
+import com.vermouthx.stocker.enums.StockerTableColumn;
 import com.vermouthx.stocker.finance.EntryTimingRecommendation;
 import com.vermouthx.stocker.finance.FinanceBridgeService;
 import com.vermouthx.stocker.finance.FinanceDistanceAnnotator;
 import com.vermouthx.stocker.finance.FinanceEventCalendar;
 import com.vermouthx.stocker.finance.FinanceState;
+import com.vermouthx.stocker.finance.FinanceSymbol;
 import com.vermouthx.stocker.finance.WatchlistEntry;
 import com.vermouthx.stocker.settings.StockerSetting;
+import com.vermouthx.stocker.utils.StockerNumberFormat;
 import com.vermouthx.stocker.utils.StockerTableModelUtil;
 import com.vermouthx.stocker.views.StockerTableView;
 
 import javax.swing.table.DefaultTableModel;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
 public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
     private final StockerTableView myTableView;
 
-    private static String formatCostPrice(Double costPrice) {
-        return costPrice != null ? String.format("%.3f", costPrice) : "-";
-    }
-
-    private static Object formatHoldings(Integer holdings) {
-        return holdings != null ? holdings : "-";
-    }
-
-    private static Object formatNetProfit(StockerQuote quote, Double costPrice, Integer holdings) {
-        if (costPrice == null || holdings == null) {
-            return "-";
-        }
-        return String.format("%.3f", (quote.getCurrent() - costPrice) * holdings);
+    public StockerQuoteUpdateListener(StockerTableView myTableView) {
+        this.myTableView = myTableView;
     }
 
     /**
@@ -42,11 +35,10 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
     private static String prefixNameWithEvents(String baseName, String code) {
         try {
             FinanceBridgeService bridge = FinanceBridgeService.getInstance();
+            String key = FinanceSymbol.normalize(code);
             Set<FinanceEventCalendar.EventKind> events = bridge.snapshot().getEventsBySymbol()
-                .getOrDefault(com.vermouthx.stocker.finance.FinanceSymbol.normalize(code),
-                              java.util.Collections.emptySet());
-            EntryTimingRecommendation entryRec = bridge.snapshot().getEntryTimingBySymbol()
-                .get(com.vermouthx.stocker.finance.FinanceSymbol.normalize(code));
+                .getOrDefault(key, Collections.emptySet());
+            EntryTimingRecommendation entryRec = bridge.snapshot().getEntryTimingBySymbol().get(key);
             String gradeGlyph = entryRec == null ? null : entryRec.getGradeGlyph();
 
             StringBuilder sb = new StringBuilder();
@@ -57,7 +49,7 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
             if (sb.charAt(sb.length() - 1) != ' ') sb.append(' ');
             sb.append(baseName);
             return sb.toString();
-        } catch (Throwable t) {
+        } catch (Exception t) {
             return baseName;
         }
     }
@@ -73,7 +65,7 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
             FinanceState.Health h = bridge.healthOf(code);
             WatchlistEntry entry = bridge.watchlistEntry(code);
             EntryTimingRecommendation rec = bridge.snapshot().getEntryTimingBySymbol()
-                .get(com.vermouthx.stocker.finance.FinanceSymbol.normalize(code));
+                .get(FinanceSymbol.normalize(code));
 
             StringBuilder tip = new StringBuilder();
             if (entry != null) {
@@ -138,146 +130,96 @@ public class StockerQuoteUpdateListener implements StockerQuoteUpdateNotifier {
                     break;
             }
             return glyph + "|" + tip.toString().trim();
-        } catch (Throwable t) {
+        } catch (Exception t) {
             return null;
         }
     }
 
-    public StockerQuoteUpdateListener(StockerTableView myTableView) {
-        this.myTableView = myTableView;
-    }
-
     @Override
     public void syncQuotes(List<StockerQuote> quotes, int size) {
-        DefaultTableModel tableModel = myTableView.getTableModel();
+        DefaultTableModel model = myTableView.getTableModel();
         StockerSetting setting = StockerSetting.Companion.getInstance();
-        
-        quotes.forEach(quote -> {
-            synchronized (myTableView.getTableModel()) {
+
+        // Resolve column indices once — they don't change inside this batch.
+        int nameCol      = StockerTableModelUtil.colOf(model, StockerTableColumn.NAME);
+        int currentCol   = StockerTableModelUtil.colOf(model, StockerTableColumn.CURRENT);
+        int openingCol   = StockerTableModelUtil.colOf(model, StockerTableColumn.OPENING);
+        int closeCol     = StockerTableModelUtil.colOf(model, StockerTableColumn.CLOSE);
+        int lowCol       = StockerTableModelUtil.colOf(model, StockerTableColumn.LOW);
+        int highCol      = StockerTableModelUtil.colOf(model, StockerTableColumn.HIGH);
+        int changeCol    = StockerTableModelUtil.colOf(model, StockerTableColumn.CHANGE);
+        int percentCol   = StockerTableModelUtil.colOf(model, StockerTableColumn.CHANGE_PERCENT);
+        int costPriceCol = StockerTableModelUtil.colOf(model, StockerTableColumn.COST_PRICE);
+        int holdingsCol  = StockerTableModelUtil.colOf(model, StockerTableColumn.HOLDINGS);
+        int netProfitCol = StockerTableModelUtil.colOf(model, StockerTableColumn.NET_PROFIT);
+        int healthCol    = StockerTableModelUtil.colOf(model, StockerTableColumn.HEALTH);
+        int distanceCol  = StockerTableModelUtil.colOf(model, StockerTableColumn.DISTANCE);
+
+        // Hold the lock for the whole batch — previously each quote re-acquired it.
+        synchronized (model) {
+            for (StockerQuote quote : quotes) {
+                String code = quote.getCode();
                 String displayName = prefixNameWithEvents(
-                    setting.getDisplayName(quote.getCode(), quote.getName()),
-                    quote.getCode());
-                int rowIndex = StockerTableModelUtil.existAt(tableModel, quote.getCode());
+                    setting.getDisplayName(code, quote.getName()), code);
+                Double costPrice = setting.getCostPrice(code);
+                Integer holdings = setting.getHoldings(code);
+
+                int rowIndex = StockerTableModelUtil.existAt(model, code);
                 if (rowIndex != -1) {
-                    // Update existing row - check each column
-                    // Column 0: Code (doesn't change)
-                    // Column 1: Name
-                    if (!tableModel.getValueAt(rowIndex, 1).equals(displayName)) {
-                        tableModel.setValueAt(displayName, rowIndex, 1);
-                        tableModel.fireTableCellUpdated(rowIndex, 1);
-                    }
-                    // Column 2: Current
-                    if (!tableModel.getValueAt(rowIndex, 2).equals(quote.getCurrent())) {
-                        tableModel.setValueAt(quote.getCurrent(), rowIndex, 2);
-                        tableModel.fireTableCellUpdated(rowIndex, 2);
-                    }
-                    // Column 3: Opening
-                    if (!tableModel.getValueAt(rowIndex, 3).equals(quote.getOpening())) {
-                        tableModel.setValueAt(quote.getOpening(), rowIndex, 3);
-                        tableModel.fireTableCellUpdated(rowIndex, 3);
-                    }
-                    // Column 4: Close
-                    if (!tableModel.getValueAt(rowIndex, 4).equals(quote.getClose())) {
-                        tableModel.setValueAt(quote.getClose(), rowIndex, 4);
-                        tableModel.fireTableCellUpdated(rowIndex, 4);
-                    }
-                    // Column 5: Low
-                    if (!tableModel.getValueAt(rowIndex, 5).equals(quote.getLow())) {
-                        tableModel.setValueAt(quote.getLow(), rowIndex, 5);
-                        tableModel.fireTableCellUpdated(rowIndex, 5);
-                    }
-                    // Column 6: High
-                    if (!tableModel.getValueAt(rowIndex, 6).equals(quote.getHigh())) {
-                        tableModel.setValueAt(quote.getHigh(), rowIndex, 6);
-                        tableModel.fireTableCellUpdated(rowIndex, 6);
-                    }
-                    // Column 7: Change
-                    if (!tableModel.getValueAt(rowIndex, 7).equals(quote.getChange())) {
-                        tableModel.setValueAt(quote.getChange(), rowIndex, 7);
-                        tableModel.fireTableCellUpdated(rowIndex, 7);
-                    }
-                    // Column 8: Change%
-                    if (!tableModel.getValueAt(rowIndex, 8).equals(quote.getPercentage())) {
-                        tableModel.setValueAt(quote.getPercentage() + "%", rowIndex, 8);
-                        tableModel.fireTableCellUpdated(rowIndex, 8);
-                    }
-                    // Column 9: Cost Price (user-set, read from settings)
-                    Double costPrice = setting.getCostPrice(quote.getCode());
-                    String costPriceStr = formatCostPrice(costPrice);
-                    if (!costPriceStr.equals(tableModel.getValueAt(rowIndex, 9))) {
-                        tableModel.setValueAt(costPriceStr, rowIndex, 9);
-                        tableModel.fireTableCellUpdated(rowIndex, 9);
-                    }
-                    // Column 10: Holdings (user-set, read from settings)
-                    Integer holdings = setting.getHoldings(quote.getCode());
-                    Object holdingsVal = formatHoldings(holdings);
-                    if (!holdingsVal.equals(tableModel.getValueAt(rowIndex, 10))) {
-                        tableModel.setValueAt(holdingsVal, rowIndex, 10);
-                        tableModel.fireTableCellUpdated(rowIndex, 10);
-                    }
-                    // Column 11: Net Profit (derived from current, cost price, and holdings)
-                    Object netProfitVal = formatNetProfit(quote, costPrice, holdings);
-                    if (!netProfitVal.equals(tableModel.getValueAt(rowIndex, 11))) {
-                        tableModel.setValueAt(netProfitVal, rowIndex, 11);
-                        tableModel.fireTableCellUpdated(rowIndex, 11);
-                    }
-                    // Column 13: Health badge (column 12 is sparkline data, set elsewhere)
-                    if (tableModel.getColumnCount() > 13) {
-                        String healthVal = formatHealthBadge(quote.getCode());
-                        Object existing = tableModel.getValueAt(rowIndex, 13);
-                        if (healthVal == null) {
-                            if (existing != null) {
-                                tableModel.setValueAt(null, rowIndex, 13);
-                                tableModel.fireTableCellUpdated(rowIndex, 13);
-                            }
-                        } else if (!healthVal.equals(existing)) {
-                            tableModel.setValueAt(healthVal, rowIndex, 13);
-                            tableModel.fireTableCellUpdated(rowIndex, 13);
-                        }
-                    }
-                    // Column 14: DISTANCE — live trigger/invalidation distance, replaces popups
-                    if (tableModel.getColumnCount() > 14) {
-                        String distVal = FinanceDistanceAnnotator.INSTANCE.encode(
-                            FinanceDistanceAnnotator.INSTANCE.annotate(quote.getCode(), quote.getCurrent()));
-                        Object existing = tableModel.getValueAt(rowIndex, 14);
-                        if (distVal == null) {
-                            if (existing != null) {
-                                tableModel.setValueAt(null, rowIndex, 14);
-                                tableModel.fireTableCellUpdated(rowIndex, 14);
-                            }
-                        } else if (!distVal.equals(existing)) {
-                            tableModel.setValueAt(distVal, rowIndex, 14);
-                            tableModel.fireTableCellUpdated(rowIndex, 14);
-                        }
-                    }
-                } else {
-                    if (quotes.size() <= size) {
-                        Double costPrice = setting.getCostPrice(quote.getCode());
-                        Integer holdings = setting.getHoldings(quote.getCode());
-                        tableModel.addRow(new Object[]{
-                            quote.getCode(),
-                            displayName,
-                            quote.getCurrent(),
-                            quote.getOpening(),
-                            quote.getClose(),
-                            quote.getLow(),
-                            quote.getHigh(),
-                            quote.getChange(),
-                            quote.getPercentage() + "%",
-                            formatCostPrice(costPrice),
-                            formatHoldings(holdings),
-                            formatNetProfit(quote, costPrice, holdings),
-                            null, // sparkline data populated by intraday fetch
-                            formatHealthBadge(quote.getCode()), // finance/ bridge health
-                            FinanceDistanceAnnotator.INSTANCE.encode(
-                                FinanceDistanceAnnotator.INSTANCE.annotate(quote.getCode(), quote.getCurrent()))
-                        });
-                        // Clear sort state when new rows are added
-                        myTableView.clearSortState();
-                    }
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, nameCol, displayName);
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, currentCol, quote.getCurrent());
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, openingCol, quote.getOpening());
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, closeCol, quote.getClose());
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, lowCol, quote.getLow());
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, highCol, quote.getHigh());
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, changeCol, quote.getChange());
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, percentCol, quote.getPercentage() + "%");
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, costPriceCol, StockerNumberFormat.formatPrice(costPrice));
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, holdingsCol, StockerNumberFormat.formatHoldings(holdings));
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, netProfitCol,
+                        StockerNumberFormat.formatNetProfit(quote.getCurrent(), costPrice, holdings));
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, healthCol, formatHealthBadge(code));
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, distanceCol,
+                        FinanceDistanceAnnotator.INSTANCE.encode(
+                            FinanceDistanceAnnotator.INSTANCE.annotate(code, quote.getCurrent())));
+                } else if (quotes.size() <= size) {
+                    Object[] row = buildRow(quote, displayName, costPrice, holdings, model.getColumnCount());
+                    model.addRow(row);
+                    myTableView.clearSortState();
                 }
             }
-        });
+        }
+    }
+
+    /**
+     * Build a new row in the order declared by the model's column identifiers, so the row
+     * is correct even if the user has hidden/reordered columns.
+     */
+    private static Object[] buildRow(StockerQuote quote, String displayName,
+                                     Double costPrice, Integer holdings, int columnCount) {
+        Object[] row = new Object[columnCount];
+        // The model is initialized with all columns present (StockerTableView.initTable),
+        // so we can assume canonical indices here. If a column is later removed from the
+        // model entirely, the corresponding cell stays null.
+        row[0] = quote.getCode();
+        row[1] = displayName;
+        row[2] = quote.getCurrent();
+        row[3] = quote.getOpening();
+        row[4] = quote.getClose();
+        row[5] = quote.getLow();
+        row[6] = quote.getHigh();
+        row[7] = quote.getChange();
+        row[8] = quote.getPercentage() + "%";
+        row[9] = StockerNumberFormat.formatPrice(costPrice);
+        row[10] = StockerNumberFormat.formatHoldings(holdings);
+        row[11] = StockerNumberFormat.formatNetProfit(quote.getCurrent(), costPrice, holdings);
+        // row[12] sparkline data populated by intraday fetch
+        if (columnCount > 13) row[13] = formatHealthBadge(quote.getCode());
+        if (columnCount > 14) {
+            row[14] = FinanceDistanceAnnotator.INSTANCE.encode(
+                FinanceDistanceAnnotator.INSTANCE.annotate(quote.getCode(), quote.getCurrent()));
+        }
+        return row;
     }
 
     @Override
