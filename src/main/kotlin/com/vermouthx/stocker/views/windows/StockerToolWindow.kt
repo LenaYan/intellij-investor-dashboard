@@ -13,11 +13,11 @@ import com.vermouthx.stocker.StockerBundle
 import com.vermouthx.stocker.finance.FinanceBridgeService
 import com.vermouthx.stocker.finance.panels.FinanceToolWindowPanel
 import com.vermouthx.stocker.listeners.StockerQuoteDeleteListener
-import com.vermouthx.stocker.listeners.StockerQuoteDeleteNotifier.*
+import com.vermouthx.stocker.listeners.StockerQuoteDeleteNotifier.Companion.STOCK_ALL_QUOTE_DELETE_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteReloadListener
-import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.*
+import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.Companion.STOCK_ALL_QUOTE_RELOAD_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateListener
-import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.*
+import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.Companion.STOCK_ALL_QUOTE_UPDATE_TOPIC
 import com.vermouthx.stocker.listeners.WatchlistQuoteUpdateListener
 
 class StockerToolWindow : ToolWindowFactory {
