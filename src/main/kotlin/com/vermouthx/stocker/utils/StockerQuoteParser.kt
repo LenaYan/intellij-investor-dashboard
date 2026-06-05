@@ -46,13 +46,10 @@ object StockerQuoteParser {
         if (textArray.size < 10) return null
         return when (marketType) {
                 StockerMarketType.AShare -> {
-                    val rawCode = textArray[0]
-                    // Strip sh/sz prefix added for API request
-                    val code = if (rawCode.length > 2 && (rawCode.startsWith("sh") || rawCode.startsWith("sz") || rawCode.startsWith("bj"))) {
-                        rawCode.substring(2).uppercase()
-                    } else {
-                        rawCode.uppercase()
-                    }
+                    // Keep the sh/sz/bj exchange prefix in the canonical row code so
+                    // SH000001 (上证指数) and SZ000001 (平安银行) don't collapse into the
+                    // same row identity. Display strips the prefix in CodeCellRenderer.
+                    val code = textArray[0].uppercase()
                     val name = textArray[1]
                     val opening = textArray[2].toDouble()
                     val close = textArray[3].toDouble()
@@ -161,10 +158,9 @@ object StockerQuoteParser {
             .mapNotNull { text ->
                 try {
                     val code = when (marketType) {
-                        StockerMarketType.AShare -> {
-                            val raw = text.subSequence(2, text.indexOfFirst { c -> c == '=' }).toString()
-                            if (raw.startsWith("sh") || raw.startsWith("sz") || raw.startsWith("bj")) raw.substring(2) else raw
-                        }
+                        // Keep sh/sz/bj prefix; see comment in parseSinaQuoteFields.
+                        StockerMarketType.AShare ->
+                            text.subSequence(2, text.indexOfFirst { c -> c == '=' }).toString()
                         StockerMarketType.HKStocks, StockerMarketType.USStocks -> text.subSequence(4,
                             text.indexOfFirst { c -> c == '=' })
                         StockerMarketType.Crypto -> ""

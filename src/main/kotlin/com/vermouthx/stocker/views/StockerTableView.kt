@@ -2,6 +2,7 @@ package com.vermouthx.stocker.views
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.ui.ComboBox
+import com.intellij.openapi.ui.Messages
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
@@ -55,7 +56,7 @@ import javax.swing.table.DefaultTableModel
 import javax.swing.table.TableCellRenderer
 import javax.swing.table.TableColumn
 
-class StockerTableView : Disposable {
+class StockerTableView(private val readOnly: Boolean = false) : Disposable {
 
     private lateinit var mPane: JPanel
     private lateinit var tbPane: JScrollPane
@@ -366,7 +367,9 @@ class StockerTableView : Disposable {
         val entryTimingItem = newItem(StockerBundle.message("menu.view.entry.timing")) { showSelectedEntryTimingPlan() }
         val bullBearItem = newItem(StockerBundle.message("menu.view.bull.bear")) { showSelectedBullBear() }
         val styleJuryItem = newItem(StockerBundle.message("menu.view.style.jury")) { showSelectedStyleJury() }
-        val deleteMenuItem = newItem(StockerBundle.message("menu.delete")) { deleteSelectedStock() }
+        // Delete is only built for editable tabs; the watchlist tab (readOnly) sources its rows
+        // from watchlist.json, where the right way to remove an entry is to edit the file.
+        val deleteMenuItem = if (readOnly) null else newItem(StockerBundle.message("menu.delete")) { deleteSelectedStock() }
 
         val defaultBackground = JBColor.namedColor("MenuItem.background", UIManager.getColor("MenuItem.background"))
         val defaultForeground = JBColor.namedColor("MenuItem.foreground", UIManager.getColor("MenuItem.foreground"))
@@ -379,7 +382,7 @@ class StockerTableView : Disposable {
             JBColor.namedColor("List.selectionForeground", tbBody.selectionForeground),
         )
 
-        val items = arrayOf(focusMenuItem, addWatchlistItem, entryTimingItem, bullBearItem, styleJuryItem, deleteMenuItem)
+        val items = listOfNotNull(focusMenuItem, addWatchlistItem, entryTimingItem, bullBearItem, styleJuryItem, deleteMenuItem)
         for (item in items) {
             item.background = defaultBackground
             item.foreground = defaultForeground
@@ -409,8 +412,10 @@ class StockerTableView : Disposable {
         popupMenu.add(entryTimingItem)
         popupMenu.add(bullBearItem)
         popupMenu.add(styleJuryItem)
-        popupMenu.addSeparator()
-        popupMenu.add(deleteMenuItem)
+        if (deleteMenuItem != null) {
+            popupMenu.addSeparator()
+            popupMenu.add(deleteMenuItem)
+        }
         return popupMenu
     }
 
@@ -461,7 +466,19 @@ class StockerTableView : Disposable {
     }
 
     private fun deleteSelectedStock() = withSelectedRow { code, name ->
-        val market = StockerSetting.instance.marketOf(code) ?: return@withSelectedRow
+        val market = StockerSetting.instance.marketOf(code)
+        if (market == null) {
+            // Row exists in the ALL table but not in any favorites list — it was merged in
+            // from watchlist.json via FinanceBridgeService.watchlistCodesByMarket(). Delete
+            // here would have nowhere to write; tell the user where to remove it instead of
+            // failing silently.
+            Messages.showInfoMessage(
+                tbBody,
+                StockerBundle.message("dialog.delete.watchlist.only.message", name ?: code),
+                StockerBundle.message("dialog.delete.cannot.delete.title"),
+            )
+            return@withSelectedRow
+        }
         StockerActionUtil.removeStock(market, StockerSuggestion(code, name ?: code, market))
     }
 
@@ -759,18 +776,28 @@ class StockerTableView : Disposable {
         return m.getValueAt(row, idx)
     }
 
-    // Inner class for Code column renderer that strips BTC prefix from crypto codes
+    // Inner class for Code column renderer that strips the BTC prefix from crypto codes
+    // and the SH/SZ/BJ exchange prefix from A-share codes. The exchange prefix is part of
+    // the row's canonical identity (so SH000001 vs SZ000001 don't collide), but users only
+    // want the bare 6-digit code in the table.
     private inner class CodeCellRenderer : StockerDefaultTableCellRender() {
         override fun getTableCellRendererComponent(
             table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int,
         ): Component {
             horizontalAlignment = DefaultTableCellRenderer.CENTER
-            // Strip BTC prefix from crypto codes for display
             var displayValue: Any? = value
             if (value != null) {
                 val code = value.toString()
                 if (code.startsWith("BTC") && code.length > 3) {
                     displayValue = code.substring(3)
+                } else if (code.length > 2) {
+                    // Only strip SH/SZ/BJ when the remainder is a plain numeric A-share code,
+                    // so we don't decapitate US tickers that happen to start with SH (SHCO, SHEN).
+                    val prefix = code.substring(0, 2).uppercase()
+                    val rest = code.substring(2)
+                    if ((prefix == "SH" || prefix == "SZ" || prefix == "BJ") && rest.all { it.isDigit() }) {
+                        displayValue = rest
+                    }
                 }
             }
             return super.getTableCellRendererComponent(table, displayValue, isSelected, hasFocus, row, column)

@@ -12,8 +12,8 @@ import com.vermouthx.stocker.actions.StockerStopAction
 import com.vermouthx.stocker.finance.panels.FinanceMainThreadHeader
 import com.vermouthx.stocker.views.StockerTableView
 
-class StockerSimpleToolWindow : SimpleToolWindowPanel(true) {
-    var tableView: StockerTableView = StockerTableView()
+class StockerSimpleToolWindow(readOnly: Boolean = false) : SimpleToolWindowPanel(true) {
+    var tableView: StockerTableView = StockerTableView(readOnly = readOnly)
     private val mainThreadHeader = FinanceMainThreadHeader()
 
     fun disposeFinance() {

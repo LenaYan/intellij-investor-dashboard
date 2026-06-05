@@ -13,7 +13,14 @@ object StockerActionUtil {
     @JvmStatic
     fun addStock(market: StockerMarketType, suggest: StockerSuggestion, project: Project?): Boolean {
         val setting = StockerSetting.instance
-        val code = suggest.code
+        // Canonicalize A-share codes to "SH000001"/"SZ000001"/"BJ430090". Search-dialog
+        // suggestions already arrive prefixed; batch-add hands us raw user input like
+        // "000001" that has to be routed to the right exchange before storage.
+        val code = if (market == StockerMarketType.AShare) {
+            StockerQuoteHttpUtil.canonicalAShareCode(suggest.code)
+        } else {
+            suggest.code
+        }
         val fullName = suggest.name
         val provider = if (market == StockerMarketType.Crypto) setting.cryptoQuoteProvider else setting.quoteProvider
         if (setting.containsCode(code)) return false

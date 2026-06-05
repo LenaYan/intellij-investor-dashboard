@@ -10,6 +10,7 @@ import com.vermouthx.stocker.enums.StockerQuoteColorPattern
 import com.vermouthx.stocker.enums.StockerQuoteProvider
 import com.vermouthx.stocker.enums.StockerTableColumn
 import com.vermouthx.stocker.utils.StockerPinyinUtil
+import com.vermouthx.stocker.utils.StockerQuoteHttpUtil
 
 @State(name = "Stocker", storages = [Storage("stocker-config.xml")])
 class StockerSetting : PersistentStateComponent<StockerSettingState> {
@@ -307,6 +308,23 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
 
     override fun loadState(state: StockerSettingState) {
         myState = state
+        migrateAShareCodesToCanonical()
+    }
+
+    /**
+     * One-shot migration: rewrite any bare A-share codes ("000001") to their canonical
+     * exchange-prefixed form ("SZ000001"). Required because the parser now keeps the
+     * sh/sz/bj prefix in row identity, so settings, fetch, and table must all agree on
+     * the same canonical key. Idempotent — already-prefixed codes pass through unchanged.
+     */
+    private fun migrateAShareCodesToCanonical() {
+        val original = myState.aShareList
+        if (original.isEmpty()) return
+        val migrated = original.map { StockerQuoteHttpUtil.canonicalAShareCode(it) }.distinct()
+        if (migrated != original) {
+            myState.aShareList = migrated.toMutableList()
+            log.info("Migrated A-share codes to canonical prefixed form (${original.size} → ${migrated.size})")
+        }
     }
 
 }

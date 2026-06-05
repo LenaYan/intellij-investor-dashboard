@@ -36,6 +36,14 @@ object StockerQuoteHttpUtil {
         return "$prefix$lower"
     }
 
+    /**
+     * Canonical "SH600519" / "SZ000001" / "BJ430090" form. Used as the stable row identity
+     * (and storage key) so that SH000001 (上证指数) and SZ000001 (平安银行) — which share a
+     * bare 6-digit code — don't collide in the table. The cell renderer strips this prefix
+     * for display, but everything else (settings, fetch, delete) routes by canonical code.
+     */
+    fun canonicalAShareCode(code: String): String = prefixedAShareCode(code).uppercase()
+
     fun closeConnections() {
         httpClientPool.close()
     }

@@ -87,9 +87,24 @@ class FinanceBridgeService : Disposable {
         snapshot().watchlistBySymbol.values.forEach { entry ->
             val market = inferMarket(entry.symbol) ?: return@forEach
             val bareCode = entry.symbol.substringBefore('.').trim()
-            if (bareCode.isNotEmpty()) {
-                out.getOrPut(market) { ArrayList() }.add(bareCode)
+            if (bareCode.isEmpty()) return@forEach
+            // A-share: keep the SH/SZ/BJ exchange context. Stripping ".SH" and letting
+            // prefixedAShareCode() guess from the leading digit silently picks the wrong
+            // exchange for indices that share a number with a Shenzhen stock
+            // (e.g. 000001 = 上证指数 on SH, but also = 平安银行 on SZ).
+            val keptCode = if (market == StockerMarketType.AShare) {
+                val suffix = entry.symbol.substringAfter('.', missingDelimiterValue = "").uppercase()
+                when (suffix) {
+                    "SH", "SZ", "BJ" -> "$suffix$bareCode"
+                    // No explicit suffix in watchlist.json — fall back to the leading-digit
+                    // heuristic so the code is still routable. Canonicalized (uppercase
+                    // SH/SZ/BJ + digits) to match storage and row identity.
+                    else -> com.vermouthx.stocker.utils.StockerQuoteHttpUtil.canonicalAShareCode(bareCode)
+                }
+            } else {
+                bareCode
             }
+            out.getOrPut(market) { ArrayList() }.add(keptCode)
         }
         return out
     }
