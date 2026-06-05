@@ -62,6 +62,7 @@ object StockerQuoteHttpUtil {
         return when {
             marketType == StockerMarketType.AShare -> prefixedAShareCode(code)
             marketType == StockerMarketType.HKStocks -> "$prefix${code.uppercase()}"
+            marketType == StockerMarketType.Futures -> "$prefix${code.uppercase()}"
             quoteProvider == StockerQuoteProvider.TENCENT && marketType == StockerMarketType.USStocks ->
                 "$prefix${code.uppercase()}"
             else -> "$prefix${code.lowercase()}"
@@ -118,6 +119,7 @@ object StockerQuoteHttpUtil {
                     StockerMarketType.HKStocks -> "hk$code"
                     StockerMarketType.USStocks -> "us${code.uppercase()}"
                     StockerMarketType.Crypto -> continue // Crypto not supported for intraday
+                    StockerMarketType.Futures -> continue // Futures intraday endpoint differs; out of MVP scope
                 }
                 val rawCode = if (prefixedCode.startsWith("sh") || prefixedCode.startsWith("sz") || prefixedCode.startsWith("bj")) {
                     prefixedCode.substring(2)

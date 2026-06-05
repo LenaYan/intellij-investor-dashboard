@@ -13,6 +13,15 @@ object StockerQuoteParser {
         return (this * 100.0).roundToInt() / 100.0
     }
 
+    private fun formatFuturesTimestamp(date: String, hhmmss: String): String {
+        // date is "2026-06-05", hhmmss is "150418" (6 digits) or "90418" (5, missing leading zero).
+        val padded = hhmmss.padStart(6, '0')
+        val hh = padded.substring(0, 2)
+        val mm = padded.substring(2, 4)
+        val ss = padded.substring(4, 6)
+        return "$date $hh:$mm:$ss"
+    }
+
     fun parseQuoteResponse(
         provider: StockerQuoteProvider, marketType: StockerMarketType, responseText: String
     ): List<StockerQuote> {
@@ -149,6 +158,43 @@ object StockerQuoteParser {
                         updateAt = updateAt
                     )
                 }
+
+                StockerMarketType.Futures -> {
+                    // Futures rows carry more columns than stocks (date at raw [17] / textArray [18]),
+                    // so the outer `textArray.size < 10` guard isn't enough. Drop truncated responses
+                    // rather than letting an IndexOutOfBoundsException be swallowed by the outer try.
+                    if (textArray.size < 19) return null
+                    // Sina nf_ contracts: textArray[0] is "nf_LH0" — strip the prefix so the
+                    // canonical row key is "LH0" (what the user typed and stored).
+                    // textArray index = rawIndex + 1 because parseSinaQuoteResponse prepends
+                    // "${code}," to the splittable string (see line 33).
+                    val code = textArray[0].removePrefix("nf_").uppercase()
+                    val name = textArray[1]                        // raw [0]
+                    val time = textArray[2]                        // raw [1] HHMMSS
+                    val opening = textArray[3].toDouble()          // raw [2]
+                    val high = textArray[4].toDouble()             // raw [3]
+                    val low = textArray[5].toDouble()              // raw [4]
+                    // Chinese futures convention: change is measured against 昨结算 (prev settle,
+                    // raw [6]), not 昨收 (prev close, raw [10]).
+                    val close = textArray[7].toDouble()            // raw [6] = 昨结算
+                    val current = textArray[9].toDouble()          // raw [8] = 最新价
+                    val change = (current - close).twoDigits()
+                    val percentage = if (close != 0.0) ((current - close) / close * 100).twoDigits() else 0.0
+                    val date = textArray[18]                       // raw [17] YYYY-MM-DD
+                    val updateAt = formatFuturesTimestamp(date, time)
+                    StockerQuote(
+                        code = code,
+                        name = name,
+                        current = current,
+                        opening = opening,
+                        close = close,
+                        low = low,
+                        high = high,
+                        change = change,
+                        percentage = percentage,
+                        updateAt = updateAt
+                    )
+                }
             }
     }
 
@@ -164,6 +210,7 @@ object StockerQuoteParser {
                         StockerMarketType.HKStocks, StockerMarketType.USStocks -> text.subSequence(4,
                             text.indexOfFirst { c -> c == '=' })
                         StockerMarketType.Crypto -> ""
+                        StockerMarketType.Futures -> return@mapNotNull null
                     }
                     val content = text.subSequence(text.indexOfFirst { c -> c == '"' } + 1, text.indexOfLast { c -> c == '"' })
                     if (content.isBlank()) return@mapNotNull null
@@ -194,6 +241,9 @@ object StockerQuoteParser {
                         }
                         StockerMarketType.USStocks -> textArray[31]
                         StockerMarketType.Crypto -> ""
+                        // Unreachable: the code-extraction `when` above returns @mapNotNull null
+                        // for Futures before reaching here. Kept for Kotlin exhaustiveness.
+                        StockerMarketType.Futures -> ""
                     }
                     StockerQuote(
                         code = parsedCode,

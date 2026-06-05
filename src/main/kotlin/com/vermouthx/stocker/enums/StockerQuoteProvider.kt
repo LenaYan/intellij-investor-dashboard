@@ -16,7 +16,8 @@ enum class StockerQuoteProvider(
             StockerMarketType.AShare to "",
             StockerMarketType.HKStocks to "hk",
             StockerMarketType.USStocks to "gb_",
-            StockerMarketType.Crypto to "btc_"
+            StockerMarketType.Crypto to "btc_",
+            StockerMarketType.Futures to "nf_"
         )
     ),
 

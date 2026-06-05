@@ -114,6 +114,12 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
             myState.cryptoList = value
         }
 
+    var futuresList: MutableList<String>
+        get() = myState.futuresList
+        set(value) {
+            myState.futuresList = value
+        }
+
     var customStockNames: MutableMap<String, String>
         get() = myState.customStockNames
         set(value) {
@@ -177,7 +183,7 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
         }
 
     val allStockListSize: Int
-        get() = aShareList.size + hkStocksList.size + usStocksList.size + cryptoList.size
+        get() = aShareList.size + hkStocksList.size + usStocksList.size + cryptoList.size + futuresList.size
 
     fun setCustomName(code: String, customName: String) {
         customStockNames[code] = customName
@@ -255,7 +261,8 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
         return aShareList.contains(code) ||
                 hkStocksList.contains(code) ||
                 usStocksList.contains(code) ||
-                cryptoList.contains(code)
+                cryptoList.contains(code) ||
+                futuresList.contains(code)
     }
 
     fun marketOf(code: String): StockerMarketType? {
@@ -270,6 +277,9 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
         }
         if (cryptoList.contains(code)) {
             return StockerMarketType.Crypto
+        }
+        if (futuresList.contains(code)) {
+            return StockerMarketType.Futures
         }
         return null
     }
@@ -297,6 +307,12 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
             StockerMarketType.Crypto -> {
                 synchronized(cryptoList) {
                     cryptoList.remove(code)
+                }
+            }
+
+            StockerMarketType.Futures -> {
+                synchronized(futuresList) {
+                    futuresList.remove(code)
                 }
             }
         }

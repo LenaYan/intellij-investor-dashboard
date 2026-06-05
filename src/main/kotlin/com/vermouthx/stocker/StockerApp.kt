@@ -9,9 +9,11 @@ import com.vermouthx.stocker.finance.FinanceBridgeService
 import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.Companion.STOCK_ALL_QUOTE_RELOAD_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.Companion.STOCK_CN_QUOTE_RELOAD_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.Companion.STOCK_CRYPTO_QUOTE_RELOAD_TOPIC
+import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.Companion.STOCK_FUTURES_QUOTE_RELOAD_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.Companion.STOCK_HK_QUOTE_RELOAD_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.Companion.STOCK_US_QUOTE_RELOAD_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.Companion.CRYPTO_QUOTE_UPDATE_TOPIC
+import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.Companion.FUTURES_QUOTE_UPDATE_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.Companion.STOCK_ALL_QUOTE_UPDATE_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.Companion.STOCK_CN_QUOTE_UPDATE_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.Companion.STOCK_HK_QUOTE_UPDATE_TOPIC
@@ -67,6 +69,7 @@ class StockerApp {
         messageBus.syncPublisher(STOCK_HK_QUOTE_RELOAD_TOPIC).clear()
         messageBus.syncPublisher(STOCK_US_QUOTE_RELOAD_TOPIC).clear()
         messageBus.syncPublisher(STOCK_CRYPTO_QUOTE_RELOAD_TOPIC).clear()
+        messageBus.syncPublisher(STOCK_FUTURES_QUOTE_RELOAD_TOPIC).clear()
     }
 
     fun shutdownThenClear() {
@@ -103,6 +106,7 @@ class StockerApp {
             val hkStocksQuotes = fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider, hkCodes) ?: return@Runnable
             val usStocksQuotes = fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider, usCodes) ?: return@Runnable
             val cryptoQuotes = fetchQuotesIfActive(StockerMarketType.Crypto, cryptoQuoteProvider, setting.cryptoList) ?: return@Runnable
+            val futuresQuotes = fetchQuotesIfActive(StockerMarketType.Futures, StockerQuoteProvider.SINA, setting.futuresList) ?: return@Runnable
 
             val aShareIndices = fetchQuotesIfActive(StockerMarketType.AShare, quoteProvider, StockerMarketIndex.CN.codes) ?: return@Runnable
             val hkStocksIndices = fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider, StockerMarketIndex.HK.codes) ?: return@Runnable
@@ -138,12 +142,18 @@ class StockerApp {
                 cryptoPublisher.syncQuotes(cryptoQuotes, setting.cryptoList.size)
             }
             cryptoPublisher.syncIndices(cryptoIndices)
-            
+
+            val futuresPublisher = messageBus.syncPublisher(FUTURES_QUOTE_UPDATE_TOPIC)
+            if (setting.futuresList.isNotEmpty()) {
+                futuresPublisher.syncQuotes(futuresQuotes, setting.futuresList.size)
+            }
+            futuresPublisher.syncIndices(emptyList())
+
             // Publish to "all" topic
             // Cap = allStockQuotes.size (favourites ∪ watchlist) so the addRow guard in
             // StockerQuoteUpdateListener (`quotes.size() <= size`) doesn't reject every
             // row when the watchlist adds codes that aren't in the per-market favourites.
-            val allStockQuotes = listOf(aShareQuotes, hkStocksQuotes, usStocksQuotes, cryptoQuotes).flatten()
+            val allStockQuotes = listOf(aShareQuotes, hkStocksQuotes, usStocksQuotes, cryptoQuotes, futuresQuotes).flatten()
             val allStockIndices = listOf(aShareIndices, hkStocksIndices, usStocksIndices, cryptoIndices).flatten()
             val allPublisher = messageBus.syncPublisher(STOCK_ALL_QUOTE_UPDATE_TOPIC)
             allPublisher.syncQuotes(allStockQuotes, allStockQuotes.size)

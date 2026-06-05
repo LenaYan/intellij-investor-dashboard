@@ -22,7 +22,7 @@ class StockerBatchAddDialog(val project: Project?) : DialogWrapper(project) {
     private val log = Logger.getInstance(StockerBatchAddDialog::class.java)
     private val setting = StockerSetting.instance
 
-    private val marketComboBox = ComboBox(arrayOf("CN (A-Share)", "HK", "US", "Crypto"))
+    private val marketComboBox = ComboBox(arrayOf("CN (A-Share)", "HK", "US", "Crypto", "Futures (主连)"))
     private val codesTextArea = JTextArea(8, 40)
 
     init {
@@ -44,7 +44,7 @@ class StockerBatchAddDialog(val project: Project?) : DialogWrapper(project) {
                 label("Codes:")
                 scrollCell(codesTextArea)
                     .align(AlignX.FILL)
-                    .comment("Enter stock codes separated by spaces or commas.<br>Example: 600519 000001 601398")
+                    .comment("Enter codes separated by spaces or commas.<br>Examples: 600519 000001 (CN) · LH0 SR0 JD0 (Futures)")
             }.layout(RowLayout.LABEL_ALIGNED)
         }
         dialogPanel.preferredSize = Dimension(500, 300)
@@ -57,6 +57,7 @@ class StockerBatchAddDialog(val project: Project?) : DialogWrapper(project) {
             1 -> StockerMarketType.HKStocks
             2 -> StockerMarketType.USStocks
             3 -> StockerMarketType.Crypto
+            4 -> StockerMarketType.Futures
             else -> StockerMarketType.AShare
         }
 
