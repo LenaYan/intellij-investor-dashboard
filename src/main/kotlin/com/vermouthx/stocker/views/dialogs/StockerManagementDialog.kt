@@ -48,13 +48,15 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
         tabbedPane.add("HK", createTabContent(StockerMarketType.HKStocks))
         tabbedPane.add("US", createTabContent(StockerMarketType.USStocks))
         tabbedPane.add("Crypto", createTabContent(StockerMarketType.Crypto))
-        
+        tabbedPane.add("Futures", createTabContent(StockerMarketType.Futures))
+
         tabbedPane.addChangeListener {
             currentMarketSelection = when (tabbedPane.selectedIndex) {
                 0 -> StockerMarketType.AShare
                 1 -> StockerMarketType.HKStocks
                 2 -> StockerMarketType.USStocks
                 3 -> StockerMarketType.Crypto
+                4 -> StockerMarketType.Futures
                 else -> return@addChangeListener
             }
         }
@@ -64,6 +66,7 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
         loadMarketData(StockerMarketType.HKStocks, setting.hkStocksList)
         loadMarketData(StockerMarketType.USStocks, setting.usStocksList)
         loadMarketData(StockerMarketType.Crypto, setting.cryptoList)
+        loadMarketData(StockerMarketType.Futures, setting.futuresList)
 
         tabbedPane.selectedIndex = 0
         return panel {
@@ -84,11 +87,11 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
         
         CompletableFuture.supplyAsync {
             try {
-                // Use cryptoQuoteProvider for crypto, quoteProvider for stocks
-                val provider = if (marketType == StockerMarketType.Crypto) {
-                    setting.cryptoQuoteProvider
-                } else {
-                    setting.quoteProvider
+                // Use cryptoQuoteProvider for crypto, quoteProvider for stocks, SINA for futures
+                val provider = when (marketType) {
+                    StockerMarketType.Crypto -> setting.cryptoQuoteProvider
+                    StockerMarketType.Futures -> com.vermouthx.stocker.enums.StockerQuoteProvider.SINA
+                    else -> setting.quoteProvider
                 }
                 StockerQuoteHttpUtil.get(marketType, provider, codes)
             } catch (e: Exception) {
@@ -136,6 +139,9 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
                         }
                         currentSymbols[StockerMarketType.Crypto]?.let { symbols ->
                             setting.cryptoList = symbols.elements().asSequence().map { it.code }.toMutableList()
+                        }
+                        currentSymbols[StockerMarketType.Futures]?.let { symbols ->
+                            setting.futuresList = symbols.elements().asSequence().map { it.code }.toMutableList()
                         }
                         myApplication.schedule()
                     }
