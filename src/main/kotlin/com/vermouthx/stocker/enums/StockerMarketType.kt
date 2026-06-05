@@ -4,5 +4,6 @@ enum class StockerMarketType(val title: String) {
     AShare("CN"),
     HKStocks("HK"),
     USStocks("US"),
-    Crypto("Crypto")
+    Crypto("Crypto"),
+    Futures("Futures")
 }
