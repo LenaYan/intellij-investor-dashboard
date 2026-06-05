@@ -160,6 +160,10 @@ object StockerQuoteParser {
                 }
 
                 StockerMarketType.Futures -> {
+                    // Futures rows carry more columns than stocks (date at raw [17] / textArray [18]),
+                    // so the outer `textArray.size < 10` guard isn't enough. Drop truncated responses
+                    // rather than letting an IndexOutOfBoundsException be swallowed by the outer try.
+                    if (textArray.size < 19) return null
                     // Sina nf_ contracts: textArray[0] is "nf_LH0" — strip the prefix so the
                     // canonical row key is "LH0" (what the user typed and stored).
                     // textArray index = rawIndex + 1 because parseSinaQuoteResponse prepends
@@ -237,6 +241,8 @@ object StockerQuoteParser {
                         }
                         StockerMarketType.USStocks -> textArray[31]
                         StockerMarketType.Crypto -> ""
+                        // Unreachable: the code-extraction `when` above returns @mapNotNull null
+                        // for Futures before reaching here. Kept for Kotlin exhaustiveness.
                         StockerMarketType.Futures -> ""
                     }
                     StockerQuote(
