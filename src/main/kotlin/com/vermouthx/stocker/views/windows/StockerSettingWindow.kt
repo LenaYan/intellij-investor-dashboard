@@ -48,6 +48,12 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
     private var financeShowCalibrationTab: Boolean = setting.financeShowCalibrationTab
     private var financeHighlightThreadChange: Boolean = setting.financeHighlightThreadChange
 
+    // Cloud sync settings
+    private var cloudSyncEnabled: Boolean = setting.cloudSyncEnabled
+    private var cloudSyncBaseUrl: String = setting.cloudSyncBaseUrl
+    private var cloudSyncApiKey: String = setting.cloudSyncApiKey
+    private var cloudSyncAutoEnabled: Boolean = setting.cloudSyncAutoEnabled
+
     companion object {
         private val LANGUAGE_CODES = listOf("", "en", "zh_CN")
 
@@ -209,6 +215,32 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 }
             }
 
+            group(StockerBundle.message("settings.group.cloud.sync")) {
+                row {
+                    checkBox(StockerBundle.message("settings.cloud.sync.enabled"))
+                        .bindSelected(::cloudSyncEnabled.toMutableProperty())
+                        .comment(StockerBundle.message("settings.cloud.sync.enabled.comment"))
+                }
+                row {
+                    label(StockerBundle.message("settings.cloud.sync.url")).widthGroup("labels")
+                    textField()
+                        .bindText(::cloudSyncBaseUrl.toMutableProperty())
+                        .widthGroup("comboboxes")
+                        .comment(StockerBundle.message("settings.cloud.sync.url.comment"))
+                }.layout(RowLayout.LABEL_ALIGNED)
+                row {
+                    label(StockerBundle.message("settings.cloud.sync.api.key")).widthGroup("labels")
+                    passwordField()
+                        .bindText(::cloudSyncApiKey.toMutableProperty())
+                        .widthGroup("comboboxes")
+                }.layout(RowLayout.LABEL_ALIGNED)
+                row {
+                    checkBox(StockerBundle.message("settings.cloud.sync.auto"))
+                        .bindSelected(::cloudSyncAutoEnabled.toMutableProperty())
+                        .comment(StockerBundle.message("settings.cloud.sync.auto.comment"))
+                }
+            }
+
             onApply {
                 val visibleColumns = buildVisibleColumns()
                 val columnsModified = visibleColumns != setting.visibleTableColumns
@@ -234,6 +266,16 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 setting.financeShowEntryTimingTab = financeShowEntryTimingTab
                 setting.financeShowCalibrationTab = financeShowCalibrationTab
                 setting.financeHighlightThreadChange = financeHighlightThreadChange
+
+                setting.cloudSyncEnabled = cloudSyncEnabled
+                setting.cloudSyncBaseUrl = cloudSyncBaseUrl
+                setting.cloudSyncApiKey = cloudSyncApiKey
+                setting.cloudSyncAutoEnabled = cloudSyncAutoEnabled
+
+                // Update cloud sync service configuration
+                val syncService = com.vermouthx.stocker.services.StockerCloudSyncService.instance
+                syncService.baseUrl = cloudSyncBaseUrl
+                syncService.apiKey = cloudSyncApiKey
 
                 if (columnsModified || languageModified) {
                     StockerTableView.refreshAllColumnVisibility()
@@ -261,7 +303,11 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                         financeNotifyEntryTiming != setting.financeNotifyEntryTiming ||
                         financeShowEntryTimingTab != setting.financeShowEntryTimingTab ||
                         financeShowCalibrationTab != setting.financeShowCalibrationTab ||
-                        financeHighlightThreadChange != setting.financeHighlightThreadChange
+                        financeHighlightThreadChange != setting.financeHighlightThreadChange ||
+                        cloudSyncEnabled != setting.cloudSyncEnabled ||
+                        cloudSyncBaseUrl != setting.cloudSyncBaseUrl ||
+                        cloudSyncApiKey != setting.cloudSyncApiKey ||
+                        cloudSyncAutoEnabled != setting.cloudSyncAutoEnabled
             }
             onReset {
                 selectedProvider = setting.quoteProvider
@@ -279,6 +325,10 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 financeShowEntryTimingTab = setting.financeShowEntryTimingTab
                 financeShowCalibrationTab = setting.financeShowCalibrationTab
                 financeHighlightThreadChange = setting.financeHighlightThreadChange
+                cloudSyncEnabled = setting.cloudSyncEnabled
+                cloudSyncBaseUrl = setting.cloudSyncBaseUrl
+                cloudSyncApiKey = setting.cloudSyncApiKey
+                cloudSyncAutoEnabled = setting.cloudSyncAutoEnabled
                 columnWarningLabel?.isVisible = false
             }
         }

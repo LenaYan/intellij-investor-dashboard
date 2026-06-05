@@ -120,10 +120,7 @@ class StockerToolWindow : ToolWindowFactory {
     }
 
     private fun subscribeMessage() {
-        // Favorites tab subscribes to the merged ALL stream and filters down to codes that
-        // exist in setting.{aShareList,hkStocksList,usStocksList,cryptoList}. Watchlist-only
-        // codes (folded into the same stream upstream for HTTP efficiency) are dropped here,
-        // so the favorites tab only ever shows what the user explicitly added.
+        // Favorites tab subscribes to the ALL stream and filters to codes in favoritesList.
         messageBusConnections.add(messageBus.connect().apply {
             subscribe(STOCK_ALL_QUOTE_UPDATE_TOPIC, FavoritesQuoteUpdateListener(allView.tableView))
         })
@@ -134,9 +131,7 @@ class StockerToolWindow : ToolWindowFactory {
             subscribe(STOCK_ALL_QUOTE_RELOAD_TOPIC, StockerQuoteReloadListener(allView.tableView))
         })
 
-        // Watchlist tab uses the mirror filter — same merged stream, narrowed down to
-        // watchlist.json codes. Intentionally not subscribed to the DELETE topic: deletes
-        // are favorites-only and the watchlist tab is read-only.
+        // Watchlist tab — same stream, filtered to watchlist.json codes.
         watchlistView?.let { v ->
             messageBusConnections.add(messageBus.connect().apply {
                 subscribe(STOCK_ALL_QUOTE_UPDATE_TOPIC, WatchlistQuoteUpdateListener(v.tableView))

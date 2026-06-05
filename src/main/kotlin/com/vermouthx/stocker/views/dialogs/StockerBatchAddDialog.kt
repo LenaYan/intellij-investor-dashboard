@@ -86,7 +86,7 @@ class StockerBatchAddDialog(val project: Project?) : DialogWrapper(project) {
         val duplicateCodes = mutableListOf<String>()
 
         for (code in codes) {
-            if (setting.containsCode(code)) {
+            if (setting.containsFavorite(marketType, code)) {
                 duplicateCodes.add(code)
                 continue
             }

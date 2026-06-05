@@ -90,35 +90,109 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
             log.info("Stocker refresh interval set to $value")
         }
 
-    var aShareList: MutableList<String>
-        get() = myState.aShareList
+    // ── Unified Favorites API ─────────────────────────────────────────────────
+
+    var favoritesList: MutableList<String>
+        get() = myState.favoritesList
         set(value) {
-            myState.aShareList = value
+            myState.favoritesList = value
+        }
+
+    /** Build the persisted key for a favorite entry. */
+    fun favoriteKey(market: StockerMarketType, code: String): String =
+        "${market.persistedId}:$code"
+
+    /** Parse a persisted key back to (market, code). Returns null if malformed. */
+    fun parseFavoriteKey(key: String): Pair<StockerMarketType, String>? {
+        val colonIdx = key.indexOf(':')
+        if (colonIdx <= 0 || colonIdx >= key.length - 1) return null
+        val marketId = key.substring(0, colonIdx)
+        val code = key.substring(colonIdx + 1)
+        val market = StockerMarketType.fromPersistedId(marketId) ?: return null
+        return market to code
+    }
+
+    fun addFavorite(market: StockerMarketType, code: String): Boolean {
+        val key = favoriteKey(market, code)
+        if (myState.favoritesList.contains(key)) return false
+        return myState.favoritesList.add(key)
+    }
+
+    fun removeFavorite(market: StockerMarketType, code: String) {
+        val key = favoriteKey(market, code)
+        myState.favoritesList.remove(key)
+    }
+
+    /** Check if a code exists in favorites for a specific market. */
+    fun containsFavorite(market: StockerMarketType, code: String): Boolean =
+        myState.favoritesList.contains(favoriteKey(market, code))
+
+    /** Check if a bare code exists in any market's favorites. */
+    fun containsCode(code: String): Boolean =
+        StockerMarketType.entries.any { containsFavorite(it, code) }
+
+    /** Find which market a bare code belongs to in favorites. */
+    fun marketOf(code: String): StockerMarketType? =
+        StockerMarketType.entries.firstOrNull { containsFavorite(it, code) }
+
+    /** Get all bare codes for a specific market (for HTTP fetching). */
+    fun codesByMarket(market: StockerMarketType): List<String> {
+        val prefix = "${market.persistedId}:"
+        return myState.favoritesList
+            .filter { it.startsWith(prefix) }
+            .map { it.substring(prefix.length) }
+    }
+
+    val allStockListSize: Int
+        get() = myState.favoritesList.size
+
+    fun removeCode(market: StockerMarketType, code: String) {
+        removeFavorite(market, code)
+    }
+
+    // ── Legacy per-market accessors (for migration compatibility) ───────────────
+
+    var aShareList: MutableList<String>
+        get() = codesByMarket(StockerMarketType.AShare).toMutableList()
+        set(value) {
+            clearMarket(StockerMarketType.AShare)
+            value.forEach { addFavorite(StockerMarketType.AShare, it) }
         }
 
     var hkStocksList: MutableList<String>
-        get() = myState.hkStocksList
+        get() = codesByMarket(StockerMarketType.HKStocks).toMutableList()
         set(value) {
-            myState.hkStocksList = value
+            clearMarket(StockerMarketType.HKStocks)
+            value.forEach { addFavorite(StockerMarketType.HKStocks, it) }
         }
 
     var usStocksList: MutableList<String>
-        get() = myState.usStocksList
+        get() = codesByMarket(StockerMarketType.USStocks).toMutableList()
         set(value) {
-            myState.usStocksList = value
+            clearMarket(StockerMarketType.USStocks)
+            value.forEach { addFavorite(StockerMarketType.USStocks, it) }
         }
 
     var cryptoList: MutableList<String>
-        get() = myState.cryptoList
+        get() = codesByMarket(StockerMarketType.Crypto).toMutableList()
         set(value) {
-            myState.cryptoList = value
+            clearMarket(StockerMarketType.Crypto)
+            value.forEach { addFavorite(StockerMarketType.Crypto, it) }
         }
 
     var futuresList: MutableList<String>
-        get() = myState.futuresList
+        get() = codesByMarket(StockerMarketType.Futures).toMutableList()
         set(value) {
-            myState.futuresList = value
+            clearMarket(StockerMarketType.Futures)
+            value.forEach { addFavorite(StockerMarketType.Futures, it) }
         }
+
+    private fun clearMarket(market: StockerMarketType) {
+        val prefix = "${market.persistedId}:"
+        myState.favoritesList.removeAll { it.startsWith(prefix) }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────
 
     var customStockNames: MutableMap<String, String>
         get() = myState.customStockNames
@@ -182,8 +256,33 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
             myState.financeHighlightThreadChange = value
         }
 
-    val allStockListSize: Int
-        get() = aShareList.size + hkStocksList.size + usStocksList.size + cryptoList.size + futuresList.size
+    // ── Cloud Sync ──────────────────────────────────────────────────────────────
+
+    var cloudSyncEnabled: Boolean
+        get() = myState.cloudSyncEnabled
+        set(value) {
+            myState.cloudSyncEnabled = value
+        }
+
+    var cloudSyncBaseUrl: String
+        get() = myState.cloudSyncBaseUrl
+        set(value) {
+            myState.cloudSyncBaseUrl = value
+        }
+
+    var cloudSyncApiKey: String
+        get() = myState.cloudSyncApiKey
+        set(value) {
+            myState.cloudSyncApiKey = value
+        }
+
+    var cloudSyncAutoEnabled: Boolean
+        get() = myState.cloudSyncAutoEnabled
+        set(value) {
+            myState.cloudSyncAutoEnabled = value
+        }
+
+    // ────────────────────────────────────────────────────────────────────────────
 
     fun setCustomName(code: String, customName: String) {
         customStockNames[code] = customName
@@ -257,90 +356,55 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
         return visibleTableColumns.contains(column.name)
     }
 
-    fun containsCode(code: String): Boolean {
-        return aShareList.contains(code) ||
-                hkStocksList.contains(code) ||
-                usStocksList.contains(code) ||
-                cryptoList.contains(code) ||
-                futuresList.contains(code)
-    }
-
-    fun marketOf(code: String): StockerMarketType? {
-        if (aShareList.contains(code)) {
-            return StockerMarketType.AShare
-        }
-        if (hkStocksList.contains(code)) {
-            return StockerMarketType.HKStocks
-        }
-        if (usStocksList.contains(code)) {
-            return StockerMarketType.USStocks
-        }
-        if (cryptoList.contains(code)) {
-            return StockerMarketType.Crypto
-        }
-        if (futuresList.contains(code)) {
-            return StockerMarketType.Futures
-        }
-        return null
-    }
-
-    fun removeCode(market: StockerMarketType, code: String) {
-        when (market) {
-            StockerMarketType.AShare -> {
-                synchronized(aShareList) {
-                    aShareList.remove(code)
-                }
-            }
-
-            StockerMarketType.HKStocks -> {
-                synchronized(hkStocksList) {
-                    hkStocksList.remove(code)
-                }
-            }
-
-            StockerMarketType.USStocks -> {
-                synchronized(usStocksList) {
-                    usStocksList.remove(code)
-                }
-            }
-
-            StockerMarketType.Crypto -> {
-                synchronized(cryptoList) {
-                    cryptoList.remove(code)
-                }
-            }
-
-            StockerMarketType.Futures -> {
-                synchronized(futuresList) {
-                    futuresList.remove(code)
-                }
-            }
-        }
-    }
-
     override fun getState(): StockerSettingState {
         return myState
     }
 
     override fun loadState(state: StockerSettingState) {
         myState = state
-        migrateAShareCodesToCanonical()
+        migrateLegacyListsToFavorites()
     }
 
     /**
-     * One-shot migration: rewrite any bare A-share codes ("000001") to their canonical
-     * exchange-prefixed form ("SZ000001"). Required because the parser now keeps the
-     * sh/sz/bj prefix in row identity, so settings, fetch, and table must all agree on
-     * the same canonical key. Idempotent — already-prefixed codes pass through unchanged.
+     * One-shot migration: merges old per-market lists (aShareList, hkStocksList, etc.)
+     * into the unified favoritesList. Also canonicalizes A-share codes.
+     * Idempotent — skipped once favoritesMigrated is true.
      */
-    private fun migrateAShareCodesToCanonical() {
-        val original = myState.aShareList
-        if (original.isEmpty()) return
-        val migrated = original.map { StockerQuoteHttpUtil.canonicalAShareCode(it) }.distinct()
-        if (migrated != original) {
-            myState.aShareList = migrated.toMutableList()
-            log.info("Migrated A-share codes to canonical prefixed form (${original.size} → ${migrated.size})")
+    private fun migrateLegacyListsToFavorites() {
+        if (myState.favoritesMigrated) return
+        if (myState.aShareList.isEmpty() && myState.hkStocksList.isEmpty() &&
+            myState.usStocksList.isEmpty() && myState.cryptoList.isEmpty() &&
+            myState.futuresList.isEmpty()
+        ) {
+            myState.favoritesMigrated = true
+            return
         }
+
+        val migrated = mutableListOf<String>()
+        // Canonicalize A-share codes first
+        myState.aShareList.map { StockerQuoteHttpUtil.canonicalAShareCode(it) }.distinct()
+            .forEach { migrated.add(favoriteKey(StockerMarketType.AShare, it)) }
+        myState.hkStocksList.distinct()
+            .forEach { migrated.add(favoriteKey(StockerMarketType.HKStocks, it)) }
+        myState.usStocksList.distinct()
+            .forEach { migrated.add(favoriteKey(StockerMarketType.USStocks, it)) }
+        myState.cryptoList.distinct()
+            .forEach { migrated.add(favoriteKey(StockerMarketType.Crypto, it)) }
+        myState.futuresList.distinct()
+            .forEach { migrated.add(favoriteKey(StockerMarketType.Futures, it)) }
+
+        // Merge with any existing favorites (avoid duplicates)
+        val existing = myState.favoritesList.toSet()
+        migrated.forEach { if (it !in existing) myState.favoritesList.add(it) }
+
+        // Clear legacy lists and mark migration complete
+        myState.aShareList.clear()
+        myState.hkStocksList.clear()
+        myState.usStocksList.clear()
+        myState.cryptoList.clear()
+        myState.futuresList.clear()
+        myState.favoritesMigrated = true
+        log.info("Migrated legacy per-market lists to unified favoritesList (${myState.favoritesList.size} entries)")
     }
 
 }

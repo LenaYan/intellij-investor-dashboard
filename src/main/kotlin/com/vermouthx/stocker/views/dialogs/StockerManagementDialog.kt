@@ -7,7 +7,6 @@ import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.components.JBList
-import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.AlignY
 import com.intellij.ui.dsl.builder.RowLayout
@@ -31,11 +30,7 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
     private val log = Logger.getInstance(StockerManagementDialog::class.java)
     private val setting = StockerSetting.instance
 
-    private val tabMap: MutableMap<StockerMarketType, JPanel> = mutableMapOf()
-
-    private val currentSymbols: MutableMap<StockerMarketType, DefaultListModel<StockerQuote>> = mutableMapOf()
-
-    private var currentMarketSelection: StockerMarketType = StockerMarketType.AShare
+    private val currentSymbols: DefaultListModel<StockerQuote> = DefaultListModel()
 
     init {
         title = "Manage Favorite Stocks"
@@ -43,69 +38,48 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
     }
 
     override fun createCenterPanel(): DialogPanel {
-        val tabbedPane = JBTabbedPane()
-        tabbedPane.add("CN", createTabContent(StockerMarketType.AShare))
-        tabbedPane.add("HK", createTabContent(StockerMarketType.HKStocks))
-        tabbedPane.add("US", createTabContent(StockerMarketType.USStocks))
-        tabbedPane.add("Crypto", createTabContent(StockerMarketType.Crypto))
-        tabbedPane.add("Futures", createTabContent(StockerMarketType.Futures))
+        val pane = JPanel(BorderLayout())
 
-        tabbedPane.addChangeListener {
-            currentMarketSelection = when (tabbedPane.selectedIndex) {
-                0 -> StockerMarketType.AShare
-                1 -> StockerMarketType.HKStocks
-                2 -> StockerMarketType.USStocks
-                3 -> StockerMarketType.Crypto
-                4 -> StockerMarketType.Futures
-                else -> return@addChangeListener
-            }
-        }
-
-        // Load data asynchronously for each market type
-        loadMarketData(StockerMarketType.AShare, setting.aShareList)
-        loadMarketData(StockerMarketType.HKStocks, setting.hkStocksList)
-        loadMarketData(StockerMarketType.USStocks, setting.usStocksList)
-        loadMarketData(StockerMarketType.Crypto, setting.cryptoList)
-        loadMarketData(StockerMarketType.Futures, setting.futuresList)
-
-        tabbedPane.selectedIndex = 0
-        return panel {
-            row {
-                cell(tabbedPane).align(AlignX.FILL)
-            }
-        }.withPreferredWidth(600).withPreferredHeight(400)
-    }
-    
-    private fun loadMarketData(marketType: StockerMarketType, codes: List<String>) {
-        val listModel = DefaultListModel<StockerQuote>()
-        currentSymbols[marketType] = listModel
-        
         // Show loading state
-        tabMap[marketType]?.let { pane ->
-            showLoadingState(pane)
-        }
-        
+        showLoadingState(pane)
+
+        // Load all favorites in one batch (grouped by market for HTTP)
         CompletableFuture.supplyAsync {
             try {
-                // Use cryptoQuoteProvider for crypto, quoteProvider for stocks, SINA for futures
-                val provider = when (marketType) {
-                    StockerMarketType.Crypto -> setting.cryptoQuoteProvider
-                    StockerMarketType.Futures -> com.vermouthx.stocker.enums.StockerQuoteProvider.SINA
-                    else -> setting.quoteProvider
+                val allQuotes = mutableListOf<StockerQuote>()
+                for (market in StockerMarketType.entries) {
+                    val codes = setting.codesByMarket(market)
+                    if (codes.isEmpty()) continue
+                    val provider = when (market) {
+                        StockerMarketType.Crypto -> setting.cryptoQuoteProvider
+                        StockerMarketType.Futures -> com.vermouthx.stocker.enums.StockerQuoteProvider.SINA
+                        else -> setting.quoteProvider
+                    }
+                    allQuotes.addAll(StockerQuoteHttpUtil.get(market, provider, codes))
                 }
-                StockerQuoteHttpUtil.get(marketType, provider, codes)
+                allQuotes
             } catch (e: Exception) {
-                log.warn("Failed to load quotes for market type $marketType", e)
+                log.warn("Failed to load quotes for favorites", e)
                 emptyList()
             }
         }.thenAccept { quotes ->
             SwingUtilities.invokeLater {
-                listModel.addAll(quotes)
-                tabMap[marketType]?.let { pane ->
-                    renderTabPane(pane, listModel)
+                // Maintain add order from favoritesList
+                val quoteByCode = quotes.associateBy { it.code }
+                for (key in setting.favoritesList) {
+                    val parsed = setting.parseFavoriteKey(key) ?: continue
+                    val (_, code) = parsed
+                    quoteByCode[code]?.let { currentSymbols.addElement(it) }
                 }
+                renderTabPane(pane, currentSymbols)
             }
         }
+
+        return panel {
+            row {
+                cell(pane).align(AlignX.FILL).align(AlignY.FILL)
+            }
+        }.withPreferredWidth(600).withPreferredHeight(400)
     }
     
     private fun showLoadingState(pane: JPanel) {
@@ -128,37 +102,22 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
                     val myApplication = StockerAppManager.myApplication(project)
                     if (myApplication != null) {
                         myApplication.shutdownThenClear()
-                        currentSymbols[StockerMarketType.AShare]?.let { symbols ->
-                            setting.aShareList = symbols.elements().asSequence().map { it.code }.toMutableList()
+                        // Rebuild favoritesList from current display order
+                        val newFavorites = mutableListOf<String>()
+                        for (i in 0 until currentSymbols.size()) {
+                            val quote = currentSymbols.getElementAt(i)
+                            val market = setting.marketOf(quote.code)
+                            if (market != null) {
+                                newFavorites.add(setting.favoriteKey(market, quote.code))
+                            }
                         }
-                        currentSymbols[StockerMarketType.HKStocks]?.let { symbols ->
-                            setting.hkStocksList = symbols.elements().asSequence().map { it.code }.toMutableList()
-                        }
-                        currentSymbols[StockerMarketType.USStocks]?.let { symbols ->
-                            setting.usStocksList = symbols.elements().asSequence().map { it.code }.toMutableList()
-                        }
-                        currentSymbols[StockerMarketType.Crypto]?.let { symbols ->
-                            setting.cryptoList = symbols.elements().asSequence().map { it.code }.toMutableList()
-                        }
-                        currentSymbols[StockerMarketType.Futures]?.let { symbols ->
-                            setting.futuresList = symbols.elements().asSequence().map { it.code }.toMutableList()
-                        }
+                        setting.favoritesList = newFavorites.toMutableList()
                         myApplication.schedule()
                     }
                     super.actionPerformed(e)
                 }
             }, cancelAction
         )
-    }
-
-    private fun createTabContent(marketType: StockerMarketType): JComponent {
-        val pane = JPanel(BorderLayout())
-        tabMap[marketType] = pane
-        return panel {
-            row {
-                cell(pane).align(AlignX.FILL).align(AlignY.FILL)
-            }
-        }
     }
 
     private fun renderTabPane(pane: JPanel, listModel: DefaultListModel<StockerQuote>) {

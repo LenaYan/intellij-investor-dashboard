@@ -7,6 +7,7 @@
     <depends>com.intellij.modules.platform</depends>
     <extensions defaultExtensionNs="com.intellij">
         <applicationService serviceImplementation="com.vermouthx.stocker.settings.StockerSetting"/>
+        <applicationService serviceImplementation="com.vermouthx.stocker.services.StockerCloudSyncService"/>
         <postStartupActivity implementation="com.vermouthx.stocker.activities.StockerStartupActivity"/>
         <notificationGroup displayType="STICKY_BALLOON" id="Stocker" isLogByDefault="true"/>
         <toolWindow id="Stocker" anchor="left" icon="/icons/logo.png" secondary="true"
@@ -65,6 +66,19 @@
                     text="%action.remove.all.favorite.stocks"
                     description="%action.remove.all.favorite.stocks.description"
                     icon="AllIcons.General.Reset">
+            </action>
+            <separator/>
+            <action class="com.vermouthx.stocker.actions.StockerCloudUploadAction"
+                    id="com.vermouthx.stocker.actions.StockerCloudUploadAction"
+                    text="%action.cloud.sync.upload"
+                    description="%action.cloud.sync.upload.description"
+                    icon="AllIcons.Actions.Upload">
+            </action>
+            <action class="com.vermouthx.stocker.actions.StockerCloudDownloadAction"
+                    id="com.vermouthx.stocker.actions.StockerCloudDownloadAction"
+                    text="%action.cloud.sync.download"
+                    description="%action.cloud.sync.download.description"
+                    icon="AllIcons.Actions.Download">
             </action>
         </group>
     </actions>

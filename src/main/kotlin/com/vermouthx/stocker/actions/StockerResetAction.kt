@@ -21,10 +21,7 @@ class StockerResetAction : AnAction() {
         myApplication?.shutdownThenClear()
 
         val setting = StockerSetting.instance
-        setting.aShareList.clear()
-        setting.hkStocksList.clear()
-        setting.usStocksList.clear()
-        setting.cryptoList.clear()
+        setting.favoritesList.clear()
 
         myApplication?.schedule()
     }

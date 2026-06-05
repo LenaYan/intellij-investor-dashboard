@@ -18,6 +18,11 @@ class StockerSettingState {
     var usStocksList: MutableList<String> = mutableListOf()
     var cryptoList: MutableList<String> = mutableListOf()
     var futuresList: MutableList<String> = mutableListOf()
+    // ── Unified favorites list (replaces per-market lists above) ────────────────
+    // Format: "MARKET_ID:CODE" e.g. "CN:SZ000001", "HK:00700", "US:AAPL"
+    var favoritesList: MutableList<String> = mutableListOf()
+    var favoritesMigrated: Boolean = false
+    // ─────────────────────────────────────────────────────────────────────────────
     var customStockNames: MutableMap<String, String> = mutableMapOf()
     var stockCostPrices: MutableMap<String, Double> = mutableMapOf()
     var stockHoldings: MutableMap<String, Int> = mutableMapOf()
@@ -38,4 +43,11 @@ class StockerSettingState {
     var financeShowEntryTimingTab: Boolean = true
     /** Flash the main-thread header for ~3s when phase or leader transitions vs yesterday. */
     var financeHighlightThreadChange: Boolean = true
+
+    // ── Cloud Sync ────────────────────────────────────────────────────────────
+    var cloudSyncEnabled: Boolean = false
+    var cloudSyncBaseUrl: String = "http://localhost:8080"
+    var cloudSyncApiKey: String = ""
+    /** Auto-sync: push changes to cloud on every add/remove. */
+    var cloudSyncAutoEnabled: Boolean = false
 }

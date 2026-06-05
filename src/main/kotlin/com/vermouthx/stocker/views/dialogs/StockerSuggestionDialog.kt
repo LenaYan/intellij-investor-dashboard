@@ -234,7 +234,7 @@ class StockerSuggestionDialog(val project: Project?) : DialogWrapper(project) {
                             minimumSize = java.awt.Dimension(300, 0)
                             preferredSize = java.awt.Dimension(300, preferredSize.height)
                         }
-                        if (StockerSetting.instance.containsCode(suggestion.code)) {
+                        if (StockerSetting.instance.containsFavorite(suggestion.market, suggestion.code)) {
                             actionButton.text = StockerStockOperation.STOCK_DELETE.operation
                         } else {
                             actionButton.text = StockerStockOperation.STOCK_ADD.operation
