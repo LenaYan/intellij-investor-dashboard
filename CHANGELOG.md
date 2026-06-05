@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.26.0] - 2026-06-05
+
+### Added
+- Domestic commodity futures (主连) as a fifth market type — Sina data only.
+- ~46-contract suggest whitelist covering 农产品/化工/金属/黑色 main 主连 codes (LH0, SR0, JD0, etc.).
+- "Futures" tab in Manage Favorites dialog; "Futures (主连)" option in Batch Add and Search dialogs.
+
+### Notes
+- Change % for futures is computed against 昨结算 (prev settle), per CFFEX/DCE convention.
+- Sparkline (intraday minute trend) is not yet wired for futures — fallback to flat.
+- Tencent provider does not support futures; the option is hidden / falls back to Sina.
+
 ## 1.25.0
 
 ### ✨ New Features / 新功能
