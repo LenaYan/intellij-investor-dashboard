@@ -8,7 +8,7 @@ import com.vermouthx.stocker.views.StockerTableView
  * Listener for the Favorites ("自选") tab. Subscribes to STOCK_ALL_QUOTE_UPDATE_TOPIC (which
  * carries the union of favorites and watchlist quotes — folded together upstream by
  * [com.vermouthx.stocker.StockerApp] to avoid duplicate HTTP requests) and filters down to
- * quotes whose code is present in one of `setting.aShareList/hkStocksList/usStocksList/cryptoList`.
+ * quotes whose code is present in one of `setting.aShareList/hkStocksList/usStocksList/cryptoList/futuresList`.
  *
  * Without this filter the favorites tab would also display watchlist-only entries, which the
  * user has no UI to delete (right-click → marketOf == null) and which collide on row identity
