@@ -17,6 +17,7 @@ import com.vermouthx.stocker.enums.StockerStockOperation
 import com.vermouthx.stocker.settings.StockerSetting
 import com.vermouthx.stocker.utils.StockerActionUtil
 import com.vermouthx.stocker.utils.StockerPinyinUtil
+import com.vermouthx.stocker.utils.StockerFuturesWhitelist
 import com.vermouthx.stocker.utils.StockerSuggestHttpUtil
 import java.awt.BorderLayout
 import java.awt.Dimension
@@ -46,7 +47,8 @@ class StockerSuggestionDialog(val project: Project?) : DialogWrapper(project) {
 
     private enum class SearchMode(val displayName: String) {
         STOCKS("Stocks (CN/HK/US)"),
-        CRYPTO("Crypto")
+        CRYPTO("Crypto"),
+        FUTURES("Futures (主连)")
     }
 
     init {
@@ -64,7 +66,7 @@ class StockerSuggestionDialog(val project: Project?) : DialogWrapper(project) {
             // Cancel any pending search task
             searchTask?.cancel(false)
             
-            if (text.isEmpty()) {
+            if (text.isEmpty() && searchMode != SearchMode.FUTURES) {
                 isLoading = false
                 suggestions = emptyList()
                 SwingUtilities.invokeLater { refreshScrollPane(scrollPane) }
@@ -76,21 +78,20 @@ class StockerSuggestionDialog(val project: Project?) : DialogWrapper(project) {
                 // Debounce: schedule search after 300ms delay
                 searchTask = service.schedule({
                     try {
-                        // Use appropriate provider and filter based on search mode
-                        val (provider, marketTypeFilter) = if (searchMode == SearchMode.CRYPTO) {
-                            setting.cryptoQuoteProvider to setOf(StockerMarketType.Crypto)
-                        } else {
-                            setting.quoteProvider to setOf(
-                                StockerMarketType.AShare,
-                                StockerMarketType.HKStocks,
-                                StockerMarketType.USStocks
+                        val filteredSuggestions = when (searchMode) {
+                            SearchMode.FUTURES -> StockerFuturesWhitelist.search(text)
+                            SearchMode.CRYPTO -> StockerSuggestHttpUtil.suggest(
+                                text, setting.cryptoQuoteProvider, setOf(StockerMarketType.Crypto)
+                            )
+                            SearchMode.STOCKS -> StockerSuggestHttpUtil.suggest(
+                                text, setting.quoteProvider, setOf(
+                                    StockerMarketType.AShare,
+                                    StockerMarketType.HKStocks,
+                                    StockerMarketType.USStocks
+                                )
                             )
                         }
-                        
-                        // Fetch filtered suggestions
-                        val filteredSuggestions = StockerSuggestHttpUtil.suggest(text, provider, marketTypeFilter)
-                        
-                        // Update UI on EDT
+
                         SwingUtilities.invokeLater {
                             isLoading = false
                             suggestions = filteredSuggestions
@@ -110,19 +111,22 @@ class StockerSuggestionDialog(val project: Project?) : DialogWrapper(project) {
         // Create mode selector panel
         val modePanel = JPanel(FlowLayout(FlowLayout.LEFT))
         modePanel.add(JLabel("Search for:"))
-        val modeComboBox = ComboBox(arrayOf(SearchMode.STOCKS.displayName, SearchMode.CRYPTO.displayName))
+        val modeComboBox = ComboBox(arrayOf(
+            SearchMode.STOCKS.displayName,
+            SearchMode.CRYPTO.displayName,
+            SearchMode.FUTURES.displayName
+        ))
         modeComboBox.selectedIndex = 0
         modeComboBox.addActionListener {
             searchMode = when (modeComboBox.selectedIndex) {
                 0 -> SearchMode.STOCKS
                 1 -> SearchMode.CRYPTO
+                2 -> SearchMode.FUTURES
                 else -> SearchMode.STOCKS
             }
-            // Trigger search again with new mode if there's text
-            val text = searchTextField.text.trim()
-            if (text.isNotEmpty()) {
-                performSearch(text)
-            }
+            // Always re-search on mode change; the empty-query gate inside performSearch
+            // decides whether to show the placeholder (STOCKS/CRYPTO) or the full whitelist (FUTURES).
+            performSearch(searchTextField.text.trim())
         }
         modePanel.add(modeComboBox)
 
@@ -179,6 +183,7 @@ class StockerSuggestionDialog(val project: Project?) : DialogWrapper(project) {
             val message = when (searchMode) {
                 SearchMode.STOCKS -> "Type to search for stocks (CN/HK/US)..."
                 SearchMode.CRYPTO -> "Type to search for crypto..."
+                SearchMode.FUTURES -> "No futures contracts matched. Try LH0, SR0, JD0..."
             }
             panel {
                 row {
