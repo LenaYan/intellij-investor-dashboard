@@ -29,5 +29,9 @@ interface StockerQuoteUpdateNotifier {
         @JvmField
         val CRYPTO_QUOTE_UPDATE_TOPIC: Topic<StockerQuoteUpdateNotifier> =
             Topic.create("CryptoQuoteUpdateTopic", StockerQuoteUpdateNotifier::class.java)
+
+        @JvmField
+        val FUTURES_QUOTE_UPDATE_TOPIC: Topic<StockerQuoteUpdateNotifier> =
+            Topic.create("FuturesQuoteUpdateTopic", StockerQuoteUpdateNotifier::class.java)
     }
 }

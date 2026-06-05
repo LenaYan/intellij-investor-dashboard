@@ -26,5 +26,9 @@ interface StockerQuoteReloadNotifier {
         @JvmField
         val STOCK_CRYPTO_QUOTE_RELOAD_TOPIC: Topic<StockerQuoteReloadNotifier> =
             Topic.create("StockerCryptoQuoteReloadTopic", StockerQuoteReloadNotifier::class.java)
+
+        @JvmField
+        val STOCK_FUTURES_QUOTE_RELOAD_TOPIC: Topic<StockerQuoteReloadNotifier> =
+            Topic.create("StockerFuturesQuoteReloadTopic", StockerQuoteReloadNotifier::class.java)
     }
 }

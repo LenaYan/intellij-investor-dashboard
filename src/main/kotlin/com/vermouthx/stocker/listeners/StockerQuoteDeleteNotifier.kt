@@ -26,5 +26,9 @@ interface StockerQuoteDeleteNotifier {
         @JvmField
         val CRYPTO_QUOTE_DELETE_TOPIC: Topic<StockerQuoteDeleteNotifier> =
             Topic.create("CryptoQuoteDeleteTopic", StockerQuoteDeleteNotifier::class.java)
+
+        @JvmField
+        val FUTURES_QUOTE_DELETE_TOPIC: Topic<StockerQuoteDeleteNotifier> =
+            Topic.create("FuturesQuoteDeleteTopic", StockerQuoteDeleteNotifier::class.java)
     }
 }
