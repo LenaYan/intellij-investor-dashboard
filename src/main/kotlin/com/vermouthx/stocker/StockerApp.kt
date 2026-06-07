@@ -10,6 +10,7 @@ import com.vermouthx.stocker.finance.FinanceBridgeService
 import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.Companion.STOCK_ALL_QUOTE_RELOAD_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.Companion.STOCK_ALL_QUOTE_UPDATE_TOPIC
 import com.vermouthx.stocker.settings.StockerSetting
+import com.vermouthx.stocker.utils.StockerIntradayCache
 import com.vermouthx.stocker.utils.StockerMarketSession
 import com.vermouthx.stocker.utils.StockerQuoteHttpUtil
 import com.vermouthx.stocker.views.StockerTableView
@@ -24,6 +25,13 @@ class StockerApp {
     private val messageBus = ApplicationManager.getApplication().messageBus
 
     private var scheduledExecutorService: ScheduledExecutorService = Executors.newScheduledThreadPool(1)
+
+    private var intradayExecutor: java.util.concurrent.ScheduledExecutorService =
+        java.util.concurrent.Executors.newScheduledThreadPool(1)
+
+    private val intradayPeriodSeconds: Long = 60L
+
+    @Volatile private var intradayTickCounter: Long = 0
 
     private var scheduleInitialDelay: Long = 3
     private val schedulePeriod: Long = StockerSetting.instance.refreshInterval
@@ -56,11 +64,22 @@ class StockerApp {
             schedulePeriod,
             TimeUnit.SECONDS
         )
+        if (intradayExecutor.isShutdown) {
+            intradayExecutor = java.util.concurrent.Executors.newScheduledThreadPool(1)
+        }
+        intradayExecutor.scheduleAtFixedRate(
+            createIntradayUpdateThread(),
+            intradayPeriodSeconds,
+            intradayPeriodSeconds,
+            java.util.concurrent.TimeUnit.SECONDS,
+        )
     }
 
     fun shutdown() {
         refreshActive = false
         scheduledExecutorService.shutdownNow()
+        intradayTickCounter = 0
+        intradayExecutor.shutdownNow()
         StockerQuoteHttpUtil.closeConnections()
     }
 
@@ -172,22 +191,64 @@ class StockerApp {
                 skipUntil = Instant.MIN
             }
 
-            // Fetch intraday data for sparkline display
+        }
+    }
+
+    /**
+     * Independent 60s intraday update: viewport + cache aware. Skipped entirely
+     * when paused or when no relevant market is open.
+     */
+    private fun createIntradayUpdateThread(): Runnable {
+        return Runnable {
+            if (pauseState == State.PAUSED) return@Runnable
             if (!shouldContinueRefresh()) return@Runnable
-            val intradayMap = mutableMapOf<String, com.vermouthx.stocker.entities.StockerIntradayData>()
-            if (aShareCodes.isNotEmpty()) {
-                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.AShare, aShareCodes))
+
+            val now = Instant.now()
+            if (!anyRelevantMarketOpen(now)) return@Runnable
+
+            val visible = StockerTableView.visibleCodesByMarket()
+            if (visible.isEmpty()) return@Runnable
+
+            val toBroadcast = HashMap<String, com.vermouthx.stocker.entities.StockerIntradayData>()
+            val intradayMarkets = setOf(
+                StockerMarketType.AShare,
+                StockerMarketType.HKStocks,
+                StockerMarketType.USStocks,
+            )
+
+            for ((market, codes) in visible) {
+                if (market !in intradayMarkets) continue
+                if (!shouldContinueRefresh()) return@Runnable
+
+                val hits = HashMap<String, com.vermouthx.stocker.entities.StockerIntradayData>()
+                val miss = ArrayList<String>()
+                for (code in codes) {
+                    val cached = StockerIntradayCache.get(code, now)
+                    if (cached != null) hits[code] = cached else miss.add(code)
+                }
+
+                if (miss.isNotEmpty()) {
+                    val fetched = StockerQuoteHttpUtil.getIntradayData(market, miss)
+                    for ((code, data) in fetched) {
+                        StockerIntradayCache.put(code, data, now)
+                        toBroadcast[code] = data
+                    }
+                }
+                toBroadcast.putAll(hits)
             }
-            if (!shouldContinueRefresh()) return@Runnable
-            if (hkCodes.isNotEmpty()) {
-                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.HKStocks, hkCodes))
+
+            if (toBroadcast.isNotEmpty()) {
+                StockerTableView.syncAllIntradayData(toBroadcast)
             }
-            if (!shouldContinueRefresh()) return@Runnable
-            if (usCodes.isNotEmpty()) {
-                intradayMap.putAll(StockerQuoteHttpUtil.getIntradayData(StockerMarketType.USStocks, usCodes))
-            }
-            if (intradayMap.isNotEmpty()) {
-                StockerTableView.syncAllIntradayData(intradayMap)
+
+            intradayTickCounter++
+            if (intradayTickCounter % 10L == 0L) {
+                val keep = HashSet<String>()
+                visible.values.forEach { keep.addAll(it) }
+                keep.addAll(setting.codesByMarket(StockerMarketType.AShare))
+                keep.addAll(setting.codesByMarket(StockerMarketType.HKStocks))
+                keep.addAll(setting.codesByMarket(StockerMarketType.USStocks))
+                StockerIntradayCache.evict(keep)
             }
         }
     }
