@@ -22,7 +22,7 @@ internal class StockerHttpClientPool(
 
         val connectionManager = PoolingHttpClientConnectionManager().apply {
             maxTotal = 20
-            defaultMaxPerRoute = 10
+            defaultMaxPerRoute = 3
         }
         val requestConfig = RequestConfig.custom()
             .setConnectTimeout(10000)
