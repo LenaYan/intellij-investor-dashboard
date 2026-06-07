@@ -9,8 +9,10 @@ import com.vermouthx.stocker.finance.FinanceBridgeService
 import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.Companion.STOCK_ALL_QUOTE_RELOAD_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.Companion.STOCK_ALL_QUOTE_UPDATE_TOPIC
 import com.vermouthx.stocker.settings.StockerSetting
+import com.vermouthx.stocker.utils.StockerMarketSession
 import com.vermouthx.stocker.utils.StockerQuoteHttpUtil
 import com.vermouthx.stocker.views.StockerTableView
+import java.time.Instant
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
@@ -85,7 +87,7 @@ class StockerApp {
                 return@Runnable
             }
 
-            val now = java.time.Instant.now()
+            val now = Instant.now()
             if (!anyRelevantMarketOpen(now)) {
                 offHoursTickCounter++
                 val ticksPerMinute = (60L / setting.refreshInterval.coerceAtLeast(1L)).coerceAtLeast(1L)
@@ -155,13 +157,13 @@ class StockerApp {
      * Codes are taken from the unified favourites list plus the finance/ watchlist
      * additions — same union the consolidated task already builds.
      */
-    private fun anyRelevantMarketOpen(now: java.time.Instant): Boolean {
-        val watchlistByMarket = com.vermouthx.stocker.finance.FinanceBridgeService.instance.watchlistCodesByMarket()
-        for (market in com.vermouthx.stocker.enums.StockerMarketType.entries) {
+    private fun anyRelevantMarketOpen(now: Instant): Boolean {
+        val watchlistByMarket = FinanceBridgeService.instance.watchlistCodesByMarket()
+        for (market in StockerMarketType.entries) {
             val codes = setting.codesByMarket(market) +
                         (watchlistByMarket[market] ?: emptyList())
             if (codes.isEmpty()) continue
-            val session = com.vermouthx.stocker.utils.StockerMarketSession.of(market) ?: continue
+            val session = StockerMarketSession.of(market) ?: continue
             if (session.isOpen(now)) return true
         }
         return false
