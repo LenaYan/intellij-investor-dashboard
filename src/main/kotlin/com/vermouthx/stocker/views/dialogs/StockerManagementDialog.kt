@@ -55,7 +55,7 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
                         StockerMarketType.Futures -> com.vermouthx.stocker.enums.StockerQuoteProvider.SINA
                         else -> setting.quoteProvider
                     }
-                    allQuotes.addAll(StockerQuoteHttpUtil.get(market, provider, codes))
+                    allQuotes.addAll(StockerQuoteHttpUtil.get(market, provider, codes).getOrDefault(emptyList()))
                 }
                 allQuotes
             } catch (e: Exception) {

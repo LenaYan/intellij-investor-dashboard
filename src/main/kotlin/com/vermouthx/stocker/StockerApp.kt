@@ -110,16 +110,32 @@ class StockerApp {
             val futuresCodes = setting.codesByMarket(StockerMarketType.Futures)
 
             // Fetch all market data
-            val aShareQuotes = fetchQuotesIfActive(StockerMarketType.AShare, quoteProvider, aShareCodes) ?: return@Runnable
-            val hkStocksQuotes = fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider, hkCodes) ?: return@Runnable
-            val usStocksQuotes = fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider, usCodes) ?: return@Runnable
-            val cryptoQuotes = fetchQuotesIfActive(StockerMarketType.Crypto, cryptoQuoteProvider, cryptoCodes) ?: return@Runnable
-            val futuresQuotes = fetchQuotesIfActive(StockerMarketType.Futures, StockerQuoteProvider.SINA, futuresCodes) ?: return@Runnable
+            val aShareResult     = fetchQuotesIfActive(StockerMarketType.AShare,   quoteProvider,        aShareCodes)  ?: return@Runnable
+            val hkStocksResult   = fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider,        hkCodes)      ?: return@Runnable
+            val usStocksResult   = fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider,        usCodes)      ?: return@Runnable
+            val cryptoResult     = fetchQuotesIfActive(StockerMarketType.Crypto,   cryptoQuoteProvider,  cryptoCodes)  ?: return@Runnable
+            val futuresResult    = fetchQuotesIfActive(StockerMarketType.Futures,  StockerQuoteProvider.SINA, futuresCodes) ?: return@Runnable
 
-            val aShareIndices = fetchQuotesIfActive(StockerMarketType.AShare, quoteProvider, StockerMarketIndex.CN.codes) ?: return@Runnable
-            val hkStocksIndices = fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider, StockerMarketIndex.HK.codes) ?: return@Runnable
-            val usStocksIndices = fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider, StockerMarketIndex.US.codes) ?: return@Runnable
-            val cryptoIndices = fetchQuotesIfActive(StockerMarketType.Crypto, cryptoQuoteProvider, StockerMarketIndex.Crypto.codes) ?: return@Runnable
+            val aShareIdxResult  = fetchQuotesIfActive(StockerMarketType.AShare,   quoteProvider,        StockerMarketIndex.CN.codes)     ?: return@Runnable
+            val hkStocksIdxResult= fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider,        StockerMarketIndex.HK.codes)     ?: return@Runnable
+            val usStocksIdxResult= fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider,        StockerMarketIndex.US.codes)     ?: return@Runnable
+            val cryptoIdxResult  = fetchQuotesIfActive(StockerMarketType.Crypto,   cryptoQuoteProvider,  StockerMarketIndex.Crypto.codes) ?: return@Runnable
+
+            val allResults = listOf(
+                aShareResult, hkStocksResult, usStocksResult, cryptoResult, futuresResult,
+                aShareIdxResult, hkStocksIdxResult, usStocksIdxResult, cryptoIdxResult,
+            )
+            val anyFailure = allResults.any { it.isFailure }
+
+            val aShareQuotes    = aShareResult.getOrDefault(emptyList())
+            val hkStocksQuotes  = hkStocksResult.getOrDefault(emptyList())
+            val usStocksQuotes  = usStocksResult.getOrDefault(emptyList())
+            val cryptoQuotes    = cryptoResult.getOrDefault(emptyList())
+            val futuresQuotes   = futuresResult.getOrDefault(emptyList())
+            val aShareIndices   = aShareIdxResult.getOrDefault(emptyList())
+            val hkStocksIndices = hkStocksIdxResult.getOrDefault(emptyList())
+            val usStocksIndices = usStocksIdxResult.getOrDefault(emptyList())
+            val cryptoIndices   = cryptoIdxResult.getOrDefault(emptyList())
 
             if (!shouldContinueRefresh()) {
                 return@Runnable
@@ -173,7 +189,7 @@ class StockerApp {
         marketType: StockerMarketType,
         quoteProvider: StockerQuoteProvider,
         codes: List<String>
-    ): List<StockerQuote>? {
+    ): Result<List<StockerQuote>>? {
         if (!shouldContinueRefresh()) {
             return null
         }

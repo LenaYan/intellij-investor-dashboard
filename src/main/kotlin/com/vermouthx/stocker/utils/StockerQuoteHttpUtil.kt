@@ -71,15 +71,14 @@ object StockerQuoteHttpUtil {
 
     fun get(
         marketType: StockerMarketType, quoteProvider: StockerQuoteProvider, codes: List<String>
-    ): List<StockerQuote> {
+    ): Result<List<StockerQuote>> {
         if (codes.isEmpty()) {
-            return emptyList()
+            return Result.success(emptyList())
         }
 
-        // Validate provider supports market type (early-out keeps the per-code path simple).
         if (quoteProvider.providerPrefixMap[marketType] == null) {
             log.warn("Provider ${quoteProvider.title} does not support market type $marketType")
-            return emptyList()
+            return Result.success(emptyList())
         }
 
         val codesParam = codes.joinToString(",") { code ->
@@ -89,16 +88,16 @@ object StockerQuoteHttpUtil {
         val url = "${quoteProvider.host}${codesParam}"
         val httpGet = HttpGet(url)
         if (quoteProvider == StockerQuoteProvider.SINA) {
-            httpGet.setHeader("Referer", "https://finance.sina.com.cn") // Sina API requires this header
+            httpGet.setHeader("Referer", "https://finance.sina.com.cn")
         }
         return try {
             httpClientPool.client().execute(httpGet).use { response ->
                 val responseText = EntityUtils.toString(response.entity, "UTF-8")
-                StockerQuoteParser.parseQuoteResponse(quoteProvider, marketType, responseText)
+                Result.success(StockerQuoteParser.parseQuoteResponse(quoteProvider, marketType, responseText))
             }
         } catch (e: Exception) {
             log.warn(e)
-            emptyList()
+            Result.failure(e)
         }
     }
 
