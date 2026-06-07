@@ -26,8 +26,8 @@ class StockerApp {
 
     private var scheduledExecutorService: ScheduledExecutorService = Executors.newScheduledThreadPool(1)
 
-    private var intradayExecutor: java.util.concurrent.ScheduledExecutorService =
-        java.util.concurrent.Executors.newScheduledThreadPool(1)
+    private var intradayExecutor: ScheduledExecutorService =
+        Executors.newScheduledThreadPool(1)
 
     private val intradayPeriodSeconds: Long = 60L
 
@@ -65,21 +65,21 @@ class StockerApp {
             TimeUnit.SECONDS
         )
         if (intradayExecutor.isShutdown) {
-            intradayExecutor = java.util.concurrent.Executors.newScheduledThreadPool(1)
+            intradayExecutor = Executors.newScheduledThreadPool(1)
         }
         intradayExecutor.scheduleAtFixedRate(
             createIntradayUpdateThread(),
             intradayPeriodSeconds,
             intradayPeriodSeconds,
-            java.util.concurrent.TimeUnit.SECONDS,
+            TimeUnit.SECONDS,
         )
     }
 
     fun shutdown() {
         refreshActive = false
-        scheduledExecutorService.shutdownNow()
         intradayTickCounter = 0
         intradayExecutor.shutdownNow()
+        scheduledExecutorService.shutdownNow()
         StockerQuoteHttpUtil.closeConnections()
     }
 
