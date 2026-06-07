@@ -27,6 +27,15 @@ class StockerApp {
     @Volatile
     private var refreshActive: Boolean = false
 
+    enum class State { RUNNING, PAUSED }
+
+    @Volatile
+    private var state: State = State.RUNNING
+
+    fun pause() { state = State.PAUSED }
+    fun resume() { state = State.RUNNING }
+    fun isPaused(): Boolean = state == State.PAUSED
+
     fun schedule() {
         if (scheduledExecutorService.isShutdown) {
             scheduledExecutorService = Executors.newScheduledThreadPool(1)
@@ -68,6 +77,9 @@ class StockerApp {
      */
     private fun createConsolidatedUpdateThread(): Runnable {
         return Runnable {
+            if (state == State.PAUSED) {
+                return@Runnable
+            }
             if (!shouldContinueRefresh()) {
                 return@Runnable
             }
