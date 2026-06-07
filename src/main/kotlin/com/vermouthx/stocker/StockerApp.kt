@@ -1,6 +1,7 @@
 package com.vermouthx.stocker
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
 import com.vermouthx.stocker.entities.StockerQuote
 import com.vermouthx.stocker.enums.StockerMarketIndex
 import com.vermouthx.stocker.enums.StockerMarketType
@@ -34,6 +35,8 @@ class StockerApp {
     @Volatile
     private var pauseState: State = State.RUNNING
     @Volatile private var offHoursTickCounter: Long = 0
+    @Volatile private var consecutiveFailures: Int = 0
+    @Volatile private var skipUntil: Instant = Instant.MIN
 
     fun pause() { pauseState = State.PAUSED }
     fun resume() { pauseState = State.RUNNING }
@@ -98,6 +101,10 @@ class StockerApp {
                 offHoursTickCounter = 0
             }
 
+            if (now.isBefore(skipUntil)) {
+                return@Runnable
+            }
+
             val quoteProvider = setting.quoteProvider
             val cryptoQuoteProvider = setting.cryptoQuoteProvider
 
@@ -147,6 +154,23 @@ class StockerApp {
             val allPublisher = messageBus.syncPublisher(STOCK_ALL_QUOTE_UPDATE_TOPIC)
             allPublisher.syncQuotes(allStockQuotes, allStockQuotes.size)
             allPublisher.syncIndices(allStockIndices)
+
+            if (anyFailure) {
+                consecutiveFailures++
+                if (consecutiveFailures >= 3) {
+                    val baseSec = setting.refreshInterval.coerceAtLeast(1L)
+                    val shift = (consecutiveFailures - 2).coerceAtMost(8)
+                    val delaySec = minOf(300L, baseSec * (1L shl shift))
+                    skipUntil = now.plusSeconds(delaySec)
+                    val log = Logger.getInstance(StockerApp::class.java)
+                    log.warn("quote backoff: failures=$consecutiveFailures, next=${delaySec}s")
+                }
+            } else if (consecutiveFailures > 0) {
+                val log = Logger.getInstance(StockerApp::class.java)
+                log.info("quote recovered after $consecutiveFailures failures")
+                consecutiveFailures = 0
+                skipUntil = Instant.MIN
+            }
 
             // Fetch intraday data for sparkline display
             if (!shouldContinueRefresh()) return@Runnable
