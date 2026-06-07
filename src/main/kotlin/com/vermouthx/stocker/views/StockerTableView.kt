@@ -281,7 +281,11 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             border = BorderFactory.createEmptyBorder()
             viewportBorder = BorderFactory.createEmptyBorder()
         }
-        tbPane.verticalScrollBar.addAdjustmentListener { refreshVisibleSnapshot() }
+        tbPane.verticalScrollBar.addAdjustmentListener { e ->
+            // Skip the intermediate adjustments while the user is still dragging;
+            // the final event after release has valueIsAdjusting == false.
+            if (!e.valueIsAdjusting) refreshVisibleSnapshot()
+        }
         javax.swing.SwingUtilities.invokeLater { refreshVisibleSnapshot() }
 
         val iPane = JPanel(GridLayout(1, 4, 8, 0)).apply {
@@ -379,7 +383,17 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             override fun componentResized(e: java.awt.event.ComponentEvent) = refreshVisibleSnapshot()
             override fun componentShown(e: java.awt.event.ComponentEvent)   = refreshVisibleSnapshot()
         })
-        tbModel.addTableModelListener { refreshVisibleSnapshot() }
+        tbModel.addTableModelListener { e ->
+            // Only refresh on structural changes — row insert/delete or full reload.
+            // Cell updates (price changes) don't affect which codes are visible.
+            val type = e.type
+            if (type == javax.swing.event.TableModelEvent.INSERT ||
+                type == javax.swing.event.TableModelEvent.DELETE ||
+                e.firstRow == javax.swing.event.TableModelEvent.HEADER_ROW
+            ) {
+                refreshVisibleSnapshot()
+            }
+        }
     }
 
     private fun handleTableMouseEvent(event: MouseEvent, rowPopupMenu: JPopupMenu) {
