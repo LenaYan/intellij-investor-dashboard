@@ -31,6 +31,7 @@ class StockerApp {
 
     @Volatile
     private var pauseState: State = State.RUNNING
+    @Volatile private var offHoursTickCounter: Long = 0
 
     fun pause() { pauseState = State.PAUSED }
     fun resume() { pauseState = State.RUNNING }
@@ -82,6 +83,17 @@ class StockerApp {
             }
             if (!shouldContinueRefresh()) {
                 return@Runnable
+            }
+
+            val now = java.time.Instant.now()
+            if (!anyRelevantMarketOpen(now)) {
+                offHoursTickCounter++
+                val ticksPerMinute = (60L / setting.refreshInterval.coerceAtLeast(1L)).coerceAtLeast(1L)
+                if (offHoursTickCounter % ticksPerMinute != 0L) {
+                    return@Runnable
+                }
+            } else {
+                offHoursTickCounter = 0
             }
 
             val quoteProvider = setting.quoteProvider
@@ -136,6 +148,23 @@ class StockerApp {
                 StockerTableView.syncAllIntradayData(intradayMap)
             }
         }
+    }
+
+    /**
+     * Returns true when at least one market the user has codes in is currently open.
+     * Codes are taken from the unified favourites list plus the finance/ watchlist
+     * additions — same union the consolidated task already builds.
+     */
+    private fun anyRelevantMarketOpen(now: java.time.Instant): Boolean {
+        val watchlistByMarket = com.vermouthx.stocker.finance.FinanceBridgeService.instance.watchlistCodesByMarket()
+        for (market in com.vermouthx.stocker.enums.StockerMarketType.entries) {
+            val codes = setting.codesByMarket(market) +
+                        (watchlistByMarket[market] ?: emptyList())
+            if (codes.isEmpty()) continue
+            val session = com.vermouthx.stocker.utils.StockerMarketSession.of(market) ?: continue
+            if (session.isOpen(now)) return true
+        }
+        return false
     }
 
     private fun fetchQuotesIfActive(
