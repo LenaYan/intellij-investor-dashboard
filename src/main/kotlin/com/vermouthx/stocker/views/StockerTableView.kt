@@ -96,6 +96,11 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
     @Volatile
     private var disposed: Boolean = false
 
+    data class VisibleSnapshot(val codes: List<String>)
+
+    @Volatile
+    private var visibleSnapshot: VisibleSnapshot = VisibleSnapshot(emptyList())
+
     init {
         tableViews.add(this)
         syncColorPatternSetting()
@@ -177,6 +182,38 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
         }
     }
 
+    /** Recompute the visible-rows snapshot. Must be called on the EDT. */
+    private fun refreshVisibleSnapshot() {
+        val rowCount = tbModel.rowCount
+        if (rowCount == 0) {
+            visibleSnapshot = VisibleSnapshot(emptyList())
+            return
+        }
+        val rect = tbBody.visibleRect
+        if (rect.width <= 0 || rect.height <= 0) {
+            visibleSnapshot = VisibleSnapshot(emptyList())
+            return
+        }
+        val firstRaw = tbBody.rowAtPoint(java.awt.Point(0, rect.y))
+        val lastRaw = tbBody.rowAtPoint(java.awt.Point(0, rect.y + rect.height - 1))
+        val first = (if (firstRaw < 0) 0 else firstRaw) - 5
+        val last  = (if (lastRaw  < 0) rowCount - 1 else lastRaw) + 5
+        val clampedFirst = first.coerceAtLeast(0)
+        val clampedLast  = last.coerceAtMost(rowCount - 1)
+        val symbolCol = com.vermouthx.stocker.utils.StockerTableModelUtil
+            .colOf(tbModel, com.vermouthx.stocker.enums.StockerTableColumn.SYMBOL)
+        if (symbolCol < 0) {
+            visibleSnapshot = VisibleSnapshot(emptyList())
+            return
+        }
+        val codes = ArrayList<String>(clampedLast - clampedFirst + 1)
+        for (modelRow in clampedFirst..clampedLast) {
+            val v = tbModel.getValueAt(modelRow, symbolCol) ?: continue
+            codes.add(v.toString())
+        }
+        visibleSnapshot = VisibleSnapshot(codes)
+    }
+
     private fun syncColorPatternSetting() {
         when (StockerSetting.instance.quoteColorPattern) {
             StockerQuoteColorPattern.RED_UP_GREEN_DOWN -> {
@@ -244,6 +281,8 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             border = BorderFactory.createEmptyBorder()
             viewportBorder = BorderFactory.createEmptyBorder()
         }
+        tbPane.verticalScrollBar.addAdjustmentListener { refreshVisibleSnapshot() }
+        javax.swing.SwingUtilities.invokeLater { refreshVisibleSnapshot() }
 
         val iPane = JPanel(GridLayout(1, 4, 8, 0)).apply {
             border = BorderFactory.createCompoundBorder(
@@ -334,6 +373,13 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
 
         applyColumnVisibility()
         tbPane.setViewportView(tbBody)
+
+        // Keep visible-snapshot fresh.
+        tbBody.addComponentListener(object : java.awt.event.ComponentAdapter() {
+            override fun componentResized(e: java.awt.event.ComponentEvent) = refreshVisibleSnapshot()
+            override fun componentShown(e: java.awt.event.ComponentEvent)   = refreshVisibleSnapshot()
+        })
+        tbModel.addTableModelListener { refreshVisibleSnapshot() }
     }
 
     private fun handleTableMouseEvent(event: MouseEvent, rowPopupMenu: JPopupMenu) {
@@ -1047,6 +1093,22 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             synchronized(tableViews) {
                 for (view in tableViews) view.syncIntradayData(intradayMap)
             }
+        }
+
+        /** Snapshot of codes currently visible across all active table views, grouped by market. */
+        @JvmStatic
+        fun visibleCodesByMarket(): Map<com.vermouthx.stocker.enums.StockerMarketType, Set<String>> {
+            val setting = com.vermouthx.stocker.settings.StockerSetting.instance
+            val grouped = HashMap<com.vermouthx.stocker.enums.StockerMarketType, MutableSet<String>>()
+            synchronized(tableViews) {
+                for (view in tableViews) {
+                    for (code in view.visibleSnapshot.codes) {
+                        val m = setting.marketOf(code) ?: continue
+                        grouped.getOrPut(m) { HashSet() }.add(code)
+                    }
+                }
+            }
+            return grouped
         }
     }
 }
