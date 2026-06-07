@@ -69,7 +69,7 @@ class StockerApp {
         }
         intradayExecutor.scheduleAtFixedRate(
             createIntradayUpdateThread(),
-            intradayPeriodSeconds,
+            scheduleInitialDelay,
             intradayPeriodSeconds,
             TimeUnit.SECONDS,
         )
@@ -78,6 +78,8 @@ class StockerApp {
     fun shutdown() {
         refreshActive = false
         intradayTickCounter = 0
+        offHoursTickCounter = 0
+        skipUntil = Instant.MIN
         intradayExecutor.shutdownNow()
         scheduledExecutorService.shutdownNow()
         StockerQuoteHttpUtil.closeConnections()
@@ -111,9 +113,10 @@ class StockerApp {
 
             val now = Instant.now()
             if (!anyRelevantMarketOpen(now)) {
-                offHoursTickCounter++
                 val ticksPerMinute = (60L / setting.refreshInterval.coerceAtLeast(1L)).coerceAtLeast(1L)
-                if (offHoursTickCounter % ticksPerMinute != 0L) {
+                val skipThisTick = offHoursTickCounter % ticksPerMinute != 0L
+                offHoursTickCounter++
+                if (skipThisTick) {
                     return@Runnable
                 }
             } else {
