@@ -43,21 +43,25 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
 
                 val rowIndex = StockerTableModelUtil.existAt(model, code)
                 if (rowIndex != -1) {
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, nameCol, displayName)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, currentCol, quote.current)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, openingCol, quote.opening)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, closeCol, quote.close)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, lowCol, quote.low)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, highCol, quote.high)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, changeCol, quote.change)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, percentCol, "${quote.percentage}%")
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, costPriceCol, StockerNumberFormat.formatPrice(costPrice))
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, holdingsCol, StockerNumberFormat.formatHoldings(holdings))
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, netProfitCol,
-                        StockerNumberFormat.formatNetProfit(quote.current, costPrice, holdings))
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, healthCol, formatHealthBadge(code))
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, distanceCol,
-                        FinanceDistanceAnnotator.encode(FinanceDistanceAnnotator.annotate(code, quote.current)))
+                    try {
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, nameCol, displayName)
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, currentCol, quote.current)
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, openingCol, quote.opening)
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, closeCol, quote.close)
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, lowCol, quote.low)
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, highCol, quote.high)
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, changeCol, quote.change)
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, percentCol, "${quote.percentage}%")
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, costPriceCol, StockerNumberFormat.formatPrice(costPrice))
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, holdingsCol, StockerNumberFormat.formatHoldings(holdings))
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, netProfitCol,
+                            StockerNumberFormat.formatNetProfit(quote.current, costPrice, holdings))
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, healthCol, formatHealthBadge(code))
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, distanceCol,
+                            FinanceDistanceAnnotator.encode(FinanceDistanceAnnotator.annotate(code, quote.current)))
+                    } finally {
+                        model.fireTableRowsUpdated(rowIndex, rowIndex)
+                    }
                 } else if (quotes.size <= size) {
                     model.addRow(buildRow(quote, displayName, costPrice, holdings, model.columnCount))
                     myTableView.clearSortState()
