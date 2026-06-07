@@ -1,10 +1,13 @@
 package com.vermouthx.stocker.views.windows
 
+import com.intellij.openapi.application.ApplicationActivationListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.wm.IdeFrame
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
+import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.ui.content.ContentFactory
 import com.intellij.util.messages.MessageBusConnection
 import com.vermouthx.stocker.StockerApp
@@ -29,6 +32,9 @@ class StockerToolWindow : ToolWindowFactory {
     private var financePanel: FinanceToolWindowPanel? = null
     private var watchlistView: StockerSimpleToolWindow? = null
     private var watchlistRefreshListener: (() -> Unit)? = null
+    @Volatile private var toolWindowVisible: Boolean = true
+    @Volatile private var ideActive: Boolean = true
+    private var toolWindowId: String? = null
     private val messageBusConnections = mutableListOf<MessageBusConnection>()
 
     override fun init(toolWindow: ToolWindow) {
@@ -99,6 +105,39 @@ class StockerToolWindow : ToolWindowFactory {
         }
         
         StockerAppManager.register(project, myApplication)
+
+        toolWindowId = toolWindow.id
+
+        // IDE activation listener — application-level bus.
+        messageBusConnections.add(
+            ApplicationManager.getApplication().messageBus.connect().apply {
+                subscribe(ApplicationActivationListener.TOPIC, object : ApplicationActivationListener {
+                    override fun applicationActivated(ideFrame: IdeFrame) {
+                        ideActive = true
+                        applyPauseState()
+                    }
+                    override fun applicationDeactivated(ideFrame: IdeFrame) {
+                        ideActive = false
+                        applyPauseState()
+                    }
+                })
+            }
+        )
+
+        // Tool-window visibility — project-level bus.
+        messageBusConnections.add(
+            project.messageBus.connect().apply {
+                subscribe(ToolWindowManagerListener.TOPIC, object : ToolWindowManagerListener {
+                    override fun stateChanged(manager: com.intellij.openapi.wm.ToolWindowManager) {
+                        val id = toolWindowId ?: return
+                        val tw = manager.getToolWindow(id) ?: return
+                        toolWindowVisible = tw.isVisible
+                        applyPauseState()
+                    }
+                })
+            }
+        )
+
         myApplication.schedule()
     }
     
@@ -117,6 +156,14 @@ class StockerToolWindow : ToolWindowFactory {
         // Disconnect all message bus connections
         messageBusConnections.forEach { it.disconnect() }
         messageBusConnections.clear()
+    }
+
+    private fun applyPauseState() {
+        if (toolWindowVisible && ideActive) {
+            myApplication.resume()
+        } else {
+            myApplication.pause()
+        }
     }
 
     private fun subscribeMessage() {
