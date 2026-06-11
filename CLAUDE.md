@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`Stocker` — a JetBrains IDE plugin (`com.vermouthx.intellij-investor-dashboard`) that shows a real-time investor dashboard inside IntelliJ IDEs. Targets IntelliJ Platform `2024.1+` (since-build `241`) via the `org.jetbrains.intellij.platform` Gradle plugin. Sources are now **Kotlin-only** (`src/main/kotlin`); there is no longer a `src/main/java` tree, even though `AGENTS.md` still describes a mixed layout.
+`Stocker` — a JetBrains IDE plugin (`com.vermouthx.intellij-investor-dashboard`) that shows a real-time investor dashboard inside IntelliJ IDEs. Targets IntelliJ Platform `2024.1+` (since-build `241`) via the `org.jetbrains.intellij.platform` Gradle plugin. Sources are **Kotlin-only** (`src/main/kotlin`); there is no longer a `src/main/java` tree.
 
 ## Build / Run / Verify
 
@@ -57,7 +57,7 @@ When you touch table/popup/refresh behavior you almost always need to inspect **
 
 ### Finance subsystem (`finance/`)
 
-A large, mostly self-contained set of files under `com/vermouthx/stocker/finance/` powers a status-bar widget (`FinanceStatusBarWidgetFactory`, registered in `plugin.xml`) and a separate tool-window UI (`panels/FinanceToolWindowPanel.kt`). It includes a watchlist writer, file watcher, daily coordinator, scenario tree, news radar, etc. This subsystem is **not** described in `AGENTS.md`. Treat it as its own bounded context: it has its own state objects (`FinanceState`, `FinancePortfolio`, …), its own notifier (`FinanceNotifier`), and its own panels. Do not entangle it with the quote-flow message bus above unless you specifically need to.
+A large, mostly self-contained set of files under `com/vermouthx/stocker/finance/` powers a status-bar widget (`FinanceStatusBarWidgetFactory`, registered in `plugin.xml`) and a separate tool-window UI (`panels/FinanceToolWindowPanel.kt`). It includes a watchlist writer, file watcher, daily coordinator, scenario tree, news radar, etc. Treat it as its own bounded context: it has its own state objects (`FinanceState`, `FinancePortfolio`, …), its own notifier (`FinanceNotifier`), and its own panels. Do not entangle it with the quote-flow message bus above unless you specifically need to.
 
 ### Settings, localization, plugin registration
 
@@ -74,6 +74,6 @@ A large, mostly self-contained set of files under `com/vermouthx/stocker/finance
 
 ## When to read the deeper guides
 
-- `AGENTS.md` — repository working rules, common pitfalls, version-bump checklist. **Caveat:** its claim that Java holds table rendering and listeners is stale; everything is Kotlin now.
+- `AGENTS.md` — repository working rules, layout map, common pitfalls, version-bump checklist.
 - `.github/copilot-instructions.md` — index of domain contracts under `.gitconfig/copilot/domains/common_domains/` (naming, module boundaries, async patterns, error handling, UI state, service surfaces, storage, testing, dependency policy). Load a domain file only when the task touches that domain.
 - `.github/agents/*.agent.md` — task-specific agent prompts (compliance, scaffolding, test coverage, dependency security, domain-contract scaffolding).
