@@ -8,7 +8,16 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.table.JBTable
 import com.vermouthx.stocker.StockerBundle
+import com.vermouthx.stocker.components.StockerCellValues
+import com.vermouthx.stocker.components.StockerChangeCellRenderer
+import com.vermouthx.stocker.components.StockerCodeCellRenderer
+import com.vermouthx.stocker.components.StockerCostCellRenderer
 import com.vermouthx.stocker.components.StockerDefaultTableCellRender
+import com.vermouthx.stocker.components.StockerDistanceCellRenderer
+import com.vermouthx.stocker.components.StockerHealthCellRenderer
+import com.vermouthx.stocker.components.StockerNetProfitCellRenderer
+import com.vermouthx.stocker.components.StockerNumericCellRenderer
+import com.vermouthx.stocker.components.StockerPercentCellRenderer
 import com.vermouthx.stocker.components.StockerSparklineCellRenderer
 import com.vermouthx.stocker.components.StockerTableHeaderRender
 import com.vermouthx.stocker.components.StockerTableModel
@@ -60,9 +69,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
 
     private lateinit var mPane: JPanel
     private lateinit var tbPane: JScrollPane
-    private var upColor: Color = JBColor.foreground()
-    private var downColor: Color = JBColor.foreground()
-    private var zeroColor: Color = JBColor.foreground()
+    private val colors = StockerQuoteColors()
     private lateinit var tbBody: JBTable
     private lateinit var tbModel: StockerTableModel
 
@@ -74,15 +81,15 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
 
     // Cache renderers to avoid creating new instances on every refresh
     private val defaultRenderer: StockerDefaultTableCellRender = StockerDefaultTableCellRender()
-    private val codeRenderer: StockerDefaultTableCellRender = CodeCellRenderer()
-    private val numericRenderer: StockerDefaultTableCellRender = NumericCellRenderer()
-    private val changeRenderer: StockerDefaultTableCellRender = ChangeCellRenderer()
-    private val percentRenderer: StockerDefaultTableCellRender = PercentCellRenderer()
-    private val costRenderer: StockerDefaultTableCellRender = CostCellRenderer()
-    private val netProfitRenderer: StockerDefaultTableCellRender = NetProfitCellRenderer()
+    private val codeRenderer: StockerDefaultTableCellRender = StockerCodeCellRenderer()
+    private val numericRenderer: StockerDefaultTableCellRender = StockerNumericCellRenderer(colors)
+    private val changeRenderer: StockerDefaultTableCellRender = StockerChangeCellRenderer(colors)
+    private val percentRenderer: StockerDefaultTableCellRender = StockerPercentCellRenderer(colors)
+    private val costRenderer: StockerDefaultTableCellRender = StockerCostCellRenderer(colors)
+    private val netProfitRenderer: StockerDefaultTableCellRender = StockerNetProfitCellRenderer(colors)
     private val sparklineRenderer = StockerSparklineCellRenderer()
-    private val healthRenderer: StockerDefaultTableCellRender = HealthCellRenderer()
-    private val distanceRenderer: StockerDefaultTableCellRender = DistanceCellRenderer()
+    private val healthRenderer: StockerDefaultTableCellRender = StockerHealthCellRenderer()
+    private val distanceRenderer: StockerDefaultTableCellRender = StockerDistanceCellRenderer()
 
     // Sorting state
     private var headerRenderer: StockerTableHeaderRender? = null
@@ -215,26 +222,8 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
     }
 
     private fun syncColorPatternSetting() {
-        when (StockerSetting.instance.quoteColorPattern) {
-            StockerQuoteColorPattern.RED_UP_GREEN_DOWN -> {
-                upColor = JBColor.RED
-                downColor = JBColor.GREEN
-                zeroColor = JBColor.GRAY
-                sparklineRenderer.redUp = true
-            }
-            StockerQuoteColorPattern.GREEN_UP_RED_DOWN -> {
-                upColor = JBColor.GREEN
-                downColor = JBColor.RED
-                zeroColor = JBColor.GRAY
-                sparklineRenderer.redUp = false
-            }
-            else -> {
-                upColor = JBColor.foreground()
-                downColor = JBColor.foreground()
-                zeroColor = JBColor.foreground()
-                sparklineRenderer.redUp = true
-            }
-        }
+        colors.syncFromSettings()
+        sparklineRenderer.redUp = colors.redUp
     }
 
     private fun updateIndex() {
@@ -250,12 +239,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             lbIndexValue.text = index.current.toString()
             lbIndexExtent.text = index.change.toString()
             lbIndexPercent.text = "${index.percentage}%"
-            val value = index.percentage
-            val color = when {
-                value > 0 -> upColor
-                value < 0 -> downColor
-                else -> zeroColor
-            }
+            val color = colors.signColor(index.percentage, JBColor.foreground())
             lbIndexValue.foreground = color
             lbIndexExtent.foreground = color
             lbIndexPercent.foreground = color
@@ -525,7 +509,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
     private fun addSelectedToClaudeWatchlist() = withSelectedRow { code, name ->
         // Find current price from the selected row (column 2 in the model).
         val row = tbBody.selectedRow
-        val refPrice = if (row >= 0) parseDouble(tbModel.getValueAt(row, 2)) else null
+        val refPrice = if (row >= 0) StockerCellValues.parseDouble(tbModel.getValueAt(row, 2)) else null
         FinanceWatchlistActions.addToWatchlist(code, name, refPrice)
     }
 
@@ -626,7 +610,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             tbModel.setValueAt(StockerNumberFormat.formatPrice(costPrice), row, costPriceColumnIndex)
             tbModel.setValueAt(StockerNumberFormat.formatHoldings(holdings), row, holdingsColumnIndex)
 
-            val currentPrice = parseDouble(tbModel.getValueAt(row, currentColumnIndex))
+            val currentPrice = StockerCellValues.parseDouble(tbModel.getValueAt(row, currentColumnIndex))
             tbModel.setValueAt(StockerNumberFormat.formatNetProfit(currentPrice, costPrice, holdings), row, netProfitColumnIndex)
         }
 
@@ -678,17 +662,6 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
                 val col = tbBody.columnModel.getColumn(i)
                 if (identifier == col.identifier) return col
             }
-            null
-        }
-    }
-
-    private fun parsePercentage(percentStr: String?): Double? {
-        if (percentStr.isNullOrEmpty()) return null
-        return try {
-            val percentIndex = percentStr.indexOf('%')
-            if (percentIndex > 0) percentStr.substring(0, percentIndex).toDouble()
-            else percentStr.toDouble()
-        } catch (_: NumberFormatException) {
             null
         }
     }
@@ -792,13 +765,13 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
                     s1.compareTo(s2, ignoreCase = true)
                 }
                 PERCENT_COL -> {
-                    val p1 = parsePercentage(val1?.toString())
-                    val p2 = parsePercentage(val2?.toString())
+                    val p1 = StockerCellValues.parsePercentage(val1?.toString())
+                    val p2 = StockerCellValues.parsePercentage(val2?.toString())
                     compareNullable(p1, p2)
                 }
                 else -> {
-                    val n1 = parseDouble(val1)
-                    val n2 = parseDouble(val2)
+                    val n1 = StockerCellValues.parseDouble(val1)
+                    val n2 = StockerCellValues.parseDouble(val2)
                     compareNullable(n1, n2)
                 }
             }
@@ -822,243 +795,6 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
         a != null -> 1
         b != null -> -1
         else -> 0
-    }
-
-    private fun parseDouble(value: Any?): Double? {
-        if (value == null) return null
-        return value.toString().toDoubleOrNull()
-    }
-
-    /** Pick up/down/zero/default color for a possibly-null direction value. */
-    private fun signColor(value: Double?, fallback: Color): Color = when {
-        value == null -> fallback
-        value > 0 -> upColor
-        value < 0 -> downColor
-        else -> zeroColor
-    }
-
-    /** Look up the (sibling) column's value on the same row, returns null on any miss. */
-    private fun siblingValue(table: JTable, row: Int, columnName: String): Any? {
-        val m = table.model as? DefaultTableModel ?: return null
-        val idx = m.findColumn(columnName)
-        if (idx < 0 || row < 0 || row >= m.rowCount) return null
-        return m.getValueAt(row, idx)
-    }
-
-    // Inner class for Code column renderer that strips the BTC prefix from crypto codes
-    // and the SH/SZ/BJ exchange prefix from A-share codes. The exchange prefix is part of
-    // the row's canonical identity (so SH000001 vs SZ000001 don't collide), but users only
-    // want the bare 6-digit code in the table.
-    private inner class CodeCellRenderer : StockerDefaultTableCellRender() {
-        override fun getTableCellRendererComponent(
-            table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int,
-        ): Component {
-            horizontalAlignment = DefaultTableCellRenderer.CENTER
-            var displayValue: Any? = value
-            if (value != null) {
-                val code = value.toString()
-                if (code.startsWith("BTC") && code.length > 3) {
-                    displayValue = code.substring(3)
-                } else if (code.length > 2) {
-                    // Only strip SH/SZ/BJ when the remainder is a plain numeric A-share code,
-                    // so we don't decapitate US tickers that happen to start with SH (SHCO, SHEN).
-                    val prefix = code.substring(0, 2).uppercase()
-                    val rest = code.substring(2)
-                    if ((prefix == "SH" || prefix == "SZ" || prefix == "BJ") && rest.all { it.isDigit() }) {
-                        displayValue = rest
-                    }
-                }
-            }
-            return super.getTableCellRendererComponent(table, displayValue, isSelected, hasFocus, row, column)
-        }
-    }
-
-    // Numeric (Current, Opening, Close, Low, High) — color tracks the row's Change% column.
-    private inner class NumericCellRenderer : StockerDefaultTableCellRender() {
-        override fun getTableCellRendererComponent(
-            table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int,
-        ): Component {
-            val c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
-            if (shouldSkipColoring(table, isSelected, row)) return c
-            val pct = siblingValue(table, row, PERCENT_COL)
-            foreground = signColor(pct?.let { parsePercentage(it.toString()) }, table.foreground)
-            return c
-        }
-    }
-
-    // Change column — color follows the value's sign.
-    private inner class ChangeCellRenderer : StockerDefaultTableCellRender() {
-        override fun getTableCellRendererComponent(
-            table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int,
-        ): Component {
-            val c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
-            if (shouldSkipColoring(table, isSelected, row)) return c
-            foreground = signColor(value?.let { parseDouble(it) }, table.foreground)
-            return c
-        }
-    }
-
-    // Change% column — parse the "%" suffix and color by sign.
-    private inner class PercentCellRenderer : StockerDefaultTableCellRender() {
-        override fun getTableCellRendererComponent(
-            table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int,
-        ): Component {
-            val c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
-            if (shouldSkipColoring(table, isSelected, row)) return c
-            foreground = signColor(value?.let { parsePercentage(it.toString()) }, table.foreground)
-            return c
-        }
-    }
-
-    // Cost column — inverted: cost > current → down color (you're underwater on a position).
-    private inner class CostCellRenderer : StockerDefaultTableCellRender() {
-        override fun getTableCellRendererComponent(
-            table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int,
-        ): Component {
-            val c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
-            if (shouldSkipColoring(table, isSelected, row)) return c
-            val cost = value?.let { parseDouble(it) }
-            val cur = siblingValue(table, row, CURRENT_COL)
-            val curPrice = cur?.let { parseDouble(it) }
-            foreground = if (cost == null || curPrice == null) {
-                table.foreground
-            } else {
-                // positive (curPrice > cost) ⇒ up color (the position is winning)
-                signColor(curPrice - cost, table.foreground)
-            }
-            return c
-        }
-    }
-
-    private inner class NetProfitCellRenderer : StockerDefaultTableCellRender() {
-        override fun getTableCellRendererComponent(
-            table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int,
-        ): Component {
-            val c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
-            if (shouldSkipColoring(table, isSelected, row)) return c
-            foreground = signColor(parseDouble(value), table.foreground)
-            return c
-        }
-    }
-
-    /**
-     * Renderer for the Health column. Value format `<glyph>|<tooltip>`, supplied by
-     * [com.vermouthx.stocker.listeners.StockerQuoteUpdateListener] based on
-     * [com.vermouthx.stocker.finance.FinanceBridgeService]. Color reflects the status,
-     * not the up/down direction.
-     */
-    private inner class HealthCellRenderer : StockerDefaultTableCellRender() {
-        private val green = JBColor(Color(0x2E7D32), Color(0x66BB6A))
-        private val yellow = JBColor(Color(0xC78A00), Color(0xFFCA28))
-        private val red = JBColor(Color(0xC62828), Color(0xEF5350))
-        private val gray = JBColor.GRAY
-
-        override fun getTableCellRendererComponent(
-            table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int,
-        ): Component {
-            val component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
-            horizontalAlignment = DefaultTableCellRenderer.CENTER
-            if (isSelected) return component
-            if (value == null) {
-                foreground = gray
-                text = "●"
-                toolTipText = null
-                return component
-            }
-            val s = value.toString()
-            val sep = s.indexOf('|')
-            val glyph = if (sep >= 0) s.substring(0, sep) else s
-            val tip = if (sep >= 0) s.substring(sep + 1) else null
-            text = "●"
-            toolTipText = tip
-            foreground = when (glyph) {
-                "G" -> green
-                "Y" -> yellow
-                "R" -> red
-                else -> gray
-            }
-            return component
-        }
-    }
-
-    /**
-     * Renderer for the DISTANCE column. Cell value format: `<level>|<text>|<tooltip>`,
-     * produced by [com.vermouthx.stocker.finance.FinanceDistanceAnnotator].
-     *
-     * Level mapping:
-     *   A (ALERT)  red background  → invalidation breached
-     *   W (WARN)   amber background → inside trigger ±1.5% OR within +1.5% of invalidation
-     *   I (INFO)   default bg, plain text → within ±5% of trigger
-     *   N (NONE)   muted gray text → passive distance (>5% away)
-     *
-     * WARN/ALERT colors only apply when the corresponding setting is enabled — turning
-     * `financeNotifyTriggers` / `financeNotifyEntryTiming` off downgrades all WARN/ALERT
-     * to neutral display (still shows the text, just without urgent color).
-     */
-    private inner class DistanceCellRenderer : StockerDefaultTableCellRender() {
-        private val alertBg = JBColor(Color(0xC62828), Color(0xB71C1C))
-        private val alertFg = JBColor(Color.WHITE, Color.WHITE)
-        private val warnBg = JBColor(Color(0xFFF1B8), Color(0x5A4B1A))
-        private val warnFg = JBColor(Color(0x6B4E00), Color(0xFFD54F))
-        private val infoFg = JBColor(Color(0x37474F), Color(0xCFD8DC))
-        private val muted = JBColor.GRAY
-
-        override fun getTableCellRendererComponent(
-            table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int,
-        ): Component {
-            val component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
-            horizontalAlignment = DefaultTableCellRenderer.CENTER
-            // Reset background — super-class may have set selection or zebra background
-            if (!isSelected) {
-                background = table.background
-                isOpaque = false
-            }
-            if (value == null) {
-                text = ""
-                toolTipText = null
-                return component
-            }
-            val s = value.toString()
-            var level = "N"
-            var label = s
-            var tip: String? = null
-            val sep1 = s.indexOf('|')
-            if (sep1 >= 0) {
-                level = s.substring(0, sep1)
-                val rest = s.substring(sep1 + 1)
-                val sep2 = rest.indexOf('|')
-                if (sep2 >= 0) {
-                    label = rest.substring(0, sep2)
-                    tip = rest.substring(sep2 + 1).ifEmpty { null }
-                } else {
-                    label = rest
-                }
-            }
-            text = label
-            toolTipText = tip
-            if (isSelected) return component
-
-            val setting = StockerSetting.instance
-            // Determine if WARN/ALERT colors should be suppressed (user disabled both flags
-            // → user explicitly opted out of urgent visuals; still show plain text).
-            val suppressUrgent = !setting.financeNotifyTriggers && !setting.financeNotifyEntryTiming
-
-            when {
-                !suppressUrgent && "A" == level -> {
-                    background = alertBg
-                    foreground = alertFg
-                    isOpaque = true
-                }
-                !suppressUrgent && "W" == level -> {
-                    background = warnBg
-                    foreground = warnFg
-                    isOpaque = true
-                }
-                "I" == level -> foreground = infoFg
-                else -> foreground = muted
-            }
-            return component
-        }
     }
 
     companion object {
