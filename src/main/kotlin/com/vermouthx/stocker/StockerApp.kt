@@ -37,7 +37,6 @@ class StockerApp {
     @Volatile private var intradayTickCounter: Long = 0
 
     private var scheduleInitialDelay: Long = 3
-    private val schedulePeriod: Long = StockerSetting.instance.refreshInterval
     @Volatile
     private var refreshActive: Boolean = false
 
@@ -61,11 +60,13 @@ class StockerApp {
         }
         refreshActive = true
         // Use single consolidated task instead of multiple overlapping tasks
-        // This reduces HTTP requests by 50% and prevents redundant data fetching
+        // This reduces HTTP requests by 50% and prevents redundant data fetching.
+        // Interval is read here (not at construction) so a settings change takes
+        // effect on the shutdown+schedule cycle the settings panel triggers.
         scheduledExecutorService.scheduleAtFixedRate(
             createConsolidatedUpdateThread(),
             scheduleInitialDelay,
-            schedulePeriod,
+            setting.refreshInterval.coerceIn(1L, 300L),
             TimeUnit.SECONDS
         )
         if (intradayExecutor.isShutdown) {

@@ -24,6 +24,7 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
     private var selectedCryptoProvider: StockerQuoteProvider = setting.cryptoQuoteProvider
     private var displayNameWithPinyin: Boolean = setting.displayNameWithPinyin
     private var languageOverride: String = setting.languageOverride
+    private var refreshIntervalSeconds: Int = setting.refreshInterval.toInt()
 
     /**
      * Per-column visibility state. Driven by [StockerTableColumn.entries] so any new
@@ -105,6 +106,14 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                         .bindItem(::selectedCryptoProvider.toNullableProperty())
                         .widthGroup("comboboxes")
                         .comment(StockerBundle.message("settings.crypto.quote.source.comment"))
+                }.layout(RowLayout.LABEL_ALIGNED)
+
+                row {
+                    label(StockerBundle.message("settings.refresh.interval"))
+                        .widthGroup("labels")
+                    intTextField(range = 1..300)
+                        .bindIntText(::refreshIntervalSeconds.toMutableProperty())
+                        .comment(StockerBundle.message("settings.refresh.interval.comment"))
                 }.layout(RowLayout.LABEL_ALIGNED)
             }
 
@@ -249,6 +258,7 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 val cryptoProviderModified = selectedCryptoProvider != setting.cryptoQuoteProvider
                 val pinyinModified = displayNameWithPinyin != setting.displayNameWithPinyin
                 val languageModified = languageOverride != setting.languageOverride
+                val intervalModified = refreshIntervalSeconds.toLong() != setting.refreshInterval
                 val financeDirChanged = financeBaseDir != setting.financeBaseDir
                 val financeEnabledChanged = financeBridgeEnabled != setting.financeBridgeEnabled
 
@@ -258,6 +268,7 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 setting.displayNameWithPinyin = displayNameWithPinyin
                 setting.visibleTableColumns = visibleColumns
                 setting.languageOverride = languageOverride
+                setting.refreshInterval = refreshIntervalSeconds.toLong()
 
                 setting.financeBridgeEnabled = financeBridgeEnabled
                 setting.financeBaseDir = financeBaseDir
@@ -283,7 +294,7 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 if (colorPatternModified) {
                     StockerTableView.refreshAllColorPatterns()
                 }
-                if (providerModified || cryptoProviderModified || pinyinModified || languageModified) {
+                if (providerModified || cryptoProviderModified || pinyinModified || languageModified || intervalModified) {
                     refreshAllWindows()
                 }
                 if (financeDirChanged || financeEnabledChanged) {
@@ -296,6 +307,7 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                         colorPattern != setting.quoteColorPattern ||
                         displayNameWithPinyin != setting.displayNameWithPinyin ||
                         languageOverride != setting.languageOverride ||
+                        refreshIntervalSeconds.toLong() != setting.refreshInterval ||
                         buildVisibleColumns() != setting.visibleTableColumns ||
                         financeBridgeEnabled != setting.financeBridgeEnabled ||
                         financeBaseDir != setting.financeBaseDir ||
@@ -315,6 +327,7 @@ class StockerSettingWindow : BoundConfigurable(StockerBundle.message("plugin.nam
                 colorPattern = setting.quoteColorPattern
                 displayNameWithPinyin = setting.displayNameWithPinyin
                 languageOverride = setting.languageOverride
+                refreshIntervalSeconds = setting.refreshInterval.toInt()
                 StockerTableColumn.entries.forEach { col ->
                     columnVisibility[col] = setting.isTableColumnVisible(col)
                 }
