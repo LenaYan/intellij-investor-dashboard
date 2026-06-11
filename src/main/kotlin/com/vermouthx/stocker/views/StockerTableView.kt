@@ -92,8 +92,6 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
     private val distanceRenderer: StockerDefaultTableCellRender = StockerDistanceCellRenderer()
 
     private var sortController: StockerTableSortController? = null
-    private var popupTargetCode: String? = null
-    private var popupTargetName: String? = null
 
     @Volatile
     private var disposed: Boolean = false
@@ -293,17 +291,17 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
     private fun initTable() {
         tbModel = StockerTableModel()
         tbBody = JBTable()
-        val rowPopupMenu = createRowPopupMenu()
+        val rowPopup = StockerTableRowPopup(tbBody, tbModel, readOnly)
 
         tbBody.addFocusListener(object : FocusAdapter() {
             override fun focusLost(e: FocusEvent) {
-                if (e.isTemporary || rowPopupMenu.isVisible) return
+                if (e.isTemporary || rowPopup.isVisible) return
                 tbBody.clearSelection()
             }
         })
         tbBody.addMouseListener(object : MouseAdapter() {
-            override fun mousePressed(e: MouseEvent) = handleTableMouseEvent(e, rowPopupMenu)
-            override fun mouseReleased(e: MouseEvent) = handleTableMouseEvent(e, rowPopupMenu)
+            override fun mousePressed(e: MouseEvent) = rowPopup.handleMouseEvent(e)
+            override fun mouseReleased(e: MouseEvent) = rowPopup.handleMouseEvent(e)
         })
 
         tbModel.setColumnIdentifiers(
@@ -372,177 +370,6 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             ) {
                 refreshVisibleSnapshot()
             }
-        }
-    }
-
-    private fun handleTableMouseEvent(event: MouseEvent, rowPopupMenu: JPopupMenu) {
-        val row = tbBody.rowAtPoint(event.point)
-        if (tbBody.isFocusOwner && row == -1 && !event.isPopupTrigger) {
-            tbBody.clearSelection()
-            return
-        }
-        if (row != -1 && (event.isPopupTrigger || SwingUtilities.isRightMouseButton(event))) {
-            tbBody.setRowSelectionInterval(row, row)
-            popupTargetCode = getStringValueAt(row, 0)
-            popupTargetName = getStringValueAt(row, 1)
-        }
-        if (event.isPopupTrigger && row != -1) {
-            rowPopupMenu.show(tbBody, event.x, event.y)
-        }
-    }
-
-    private fun createRowPopupMenu(): JPopupMenu {
-        val popupMenu = JPopupMenu()
-
-        fun newItem(text: String?, onClick: () -> Unit): JMenuItem = JMenuItem(text ?: "").apply {
-            isOpaque = true
-            isRolloverEnabled = true
-            border = BorderFactory.createEmptyBorder(6, 12, 6, 12)
-            addActionListener { onClick() }
-        }
-
-        val focusMenuItem = newItem(null) { toggleFocusSelectedStock() }
-        val priceAlertItem = newItem(StockerBundle.message("menu.price.alert")) { setPriceAlertForSelectedStock() }
-        val addWatchlistItem = newItem(StockerBundle.message("menu.add.to.claude.watchlist")) { addSelectedToClaudeWatchlist() }
-        val entryTimingItem = newItem(StockerBundle.message("menu.view.entry.timing")) { showSelectedEntryTimingPlan() }
-        val bullBearItem = newItem(StockerBundle.message("menu.view.bull.bear")) { showSelectedBullBear() }
-        val styleJuryItem = newItem(StockerBundle.message("menu.view.style.jury")) { showSelectedStyleJury() }
-        // Delete is only built for editable tabs; the watchlist tab (readOnly) sources its rows
-        // from watchlist.json, where the right way to remove an entry is to edit the file.
-        val deleteMenuItem = if (readOnly) null else newItem(StockerBundle.message("menu.delete")) { deleteSelectedStock() }
-
-        val defaultBackground = JBColor.namedColor("MenuItem.background", UIManager.getColor("MenuItem.background"))
-        val defaultForeground = JBColor.namedColor("MenuItem.foreground", UIManager.getColor("MenuItem.foreground"))
-        val hoverBackground = JBColor.namedColor(
-            "MenuItem.selectionBackground",
-            JBColor.namedColor("List.selectionBackground", tbBody.selectionBackground),
-        )
-        val hoverForeground = JBColor.namedColor(
-            "MenuItem.selectionForeground",
-            JBColor.namedColor("List.selectionForeground", tbBody.selectionForeground),
-        )
-
-        val items = listOfNotNull(focusMenuItem, priceAlertItem, addWatchlistItem, entryTimingItem, bullBearItem, styleJuryItem, deleteMenuItem)
-        for (item in items) {
-            item.background = defaultBackground
-            item.foreground = defaultForeground
-            item.model.addChangeListener {
-                val model: ButtonModel = item.model
-                val hovering = model.isArmed || model.isRollover
-                item.background = if (hovering) hoverBackground else defaultBackground
-                item.foreground = if (hovering) hoverForeground else defaultForeground
-            }
-        }
-
-        popupMenu.addPopupMenuListener(object : PopupMenuListener {
-            override fun popupMenuWillBecomeVisible(e: PopupMenuEvent) {
-                val code = popupTargetCode
-                focusMenuItem.text = if (code != null && StockerSetting.instance.isStockFocused(code)) {
-                    StockerBundle.message("menu.unfocus")
-                } else {
-                    StockerBundle.message("menu.focus")
-                }
-            }
-            override fun popupMenuWillBecomeInvisible(e: PopupMenuEvent) = clearPopupStateLater(popupMenu)
-            override fun popupMenuCanceled(e: PopupMenuEvent) = clearPopupStateLater(popupMenu)
-        })
-        popupMenu.add(focusMenuItem)
-        popupMenu.add(priceAlertItem)
-        popupMenu.addSeparator()
-        popupMenu.add(addWatchlistItem)
-        popupMenu.add(entryTimingItem)
-        popupMenu.add(bullBearItem)
-        popupMenu.add(styleJuryItem)
-        if (deleteMenuItem != null) {
-            popupMenu.addSeparator()
-            popupMenu.add(deleteMenuItem)
-        }
-        return popupMenu
-    }
-
-    /**
-     * Resolve (code, name) from the popup target (if a right-click set them) or from the
-     * currently selected row, then hand them to [action]. Clears popup state in all paths,
-     * including when no row is resolvable. The 6 popup actions previously open-coded this.
-     */
-    private fun withSelectedRow(action: (String, String?) -> Unit) {
-        try {
-            var code = popupTargetCode
-            var name = popupTargetName
-            if (code == null) {
-                val selectedRow = tbBody.selectedRow
-                if (selectedRow < 0) return
-                code = getStringValueAt(selectedRow, 0)
-                name = getStringValueAt(selectedRow, 1)
-            }
-            if (code == null) return
-            action(code, name)
-        } finally {
-            clearPopupTarget()
-        }
-    }
-
-    private fun setPriceAlertForSelectedStock() = withSelectedRow { code, name ->
-        val dialog = com.vermouthx.stocker.views.dialogs.StockerPriceAlertDialog(code, name)
-        if (dialog.showAndGet()) {
-            StockerSetting.instance.setPriceAlerts(code, dialog.aboveValue, dialog.belowValue)
-        }
-    }
-
-    private fun showSelectedBullBear() = withSelectedRow { code, name ->
-        FinanceReportActions.showBullBear(tbBody, code, name)
-    }
-
-    private fun showSelectedStyleJury() = withSelectedRow { code, name ->
-        FinanceReportActions.showStyleJury(tbBody, code, name)
-    }
-
-    private fun showSelectedEntryTimingPlan() = withSelectedRow { code, name ->
-        FinanceEntryTimingActions.showPopup(tbBody, code, name)
-    }
-
-    private fun addSelectedToClaudeWatchlist() = withSelectedRow { code, name ->
-        // Find current price from the selected row (column 2 in the model).
-        val row = tbBody.selectedRow
-        val refPrice = if (row >= 0) StockerCellValues.parseDouble(tbModel.getValueAt(row, 2)) else null
-        FinanceWatchlistActions.addToWatchlist(code, name, refPrice)
-    }
-
-    private fun toggleFocusSelectedStock() = withSelectedRow { code, _ ->
-        StockerSetting.instance.toggleFocusStock(code)
-        tbBody.repaint()
-    }
-
-    private fun deleteSelectedStock() = withSelectedRow { code, name ->
-        val market = StockerSetting.instance.marketOf(code)
-        if (market == null) {
-            // Row exists in the ALL table but not in any favorites list — it was merged in
-            // from watchlist.json via FinanceBridgeService.watchlistCodesByMarket(). Delete
-            // here would have nowhere to write; tell the user where to remove it instead of
-            // failing silently.
-            Messages.showInfoMessage(
-                tbBody,
-                StockerBundle.message("dialog.delete.watchlist.only.message", name ?: code),
-                StockerBundle.message("dialog.delete.cannot.delete.title"),
-            )
-            return@withSelectedRow
-        }
-        StockerActionUtil.removeStock(market, StockerSuggestion(code, name ?: code, market))
-    }
-
-    private fun getStringValueAt(row: Int, column: Int): String? =
-        tbModel.getValueAt(row, column)?.toString()
-
-    private fun clearPopupTarget() {
-        popupTargetCode = null
-        popupTargetName = null
-    }
-
-    private fun clearPopupStateLater(popupMenu: JPopupMenu) {
-        SwingUtilities.invokeLater {
-            if (popupMenu.isVisible) return@invokeLater
-            clearPopupTarget()
-            if (!tbBody.isFocusOwner) tbBody.clearSelection()
         }
     }
 
