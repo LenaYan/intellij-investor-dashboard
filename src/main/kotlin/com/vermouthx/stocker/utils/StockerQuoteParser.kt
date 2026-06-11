@@ -25,13 +25,11 @@ object StockerQuoteParser {
     fun parseQuoteResponse(
         provider: StockerQuoteProvider, marketType: StockerMarketType, responseText: String
     ): List<StockerQuote> {
-        return when (provider) {
-            StockerQuoteProvider.SINA -> parseSinaQuoteResponse(marketType, responseText)
-            StockerQuoteProvider.TENCENT -> parseTencentQuoteResponse(marketType, responseText)
-        }
+        // Dispatch lives on the provider (StockerQuoteSource); kept here as a stable façade.
+        return provider.parseQuoteResponse(marketType, responseText)
     }
 
-    private fun parseSinaQuoteResponse(marketType: StockerMarketType, responseText: String): List<StockerQuote> {
+    internal fun parseSinaQuoteResponse(marketType: StockerMarketType, responseText: String): List<StockerQuote> {
         val regex = Regex("var hq_str_(\\w+?)=\"(.*?)\";")
         return responseText.split("\n").asSequence()
             .filter { text -> text.isNotEmpty() }
@@ -198,7 +196,7 @@ object StockerQuoteParser {
             }
     }
 
-    private fun parseTencentQuoteResponse(marketType: StockerMarketType, responseText: String): List<StockerQuote> {
+    internal fun parseTencentQuoteResponse(marketType: StockerMarketType, responseText: String): List<StockerQuote> {
         return responseText.split("\n").asSequence()
             .filter { text -> text.isNotEmpty() && !text.startsWith("v_pv_none_match") }
             .mapNotNull { text ->

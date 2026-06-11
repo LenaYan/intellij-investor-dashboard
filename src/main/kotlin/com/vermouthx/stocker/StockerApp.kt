@@ -175,17 +175,17 @@ class StockerApp {
             val cryptoCodes = setting.codesByMarket(StockerMarketType.Crypto)
             val futuresCodes = setting.codesByMarket(StockerMarketType.Futures)
 
-            // Fetch all market data
-            val aShareResult     = fetchQuotesIfActive(StockerMarketType.AShare,   quoteProvider,        aShareCodes)  ?: return
-            val hkStocksResult   = fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider,        hkCodes)      ?: return
-            val usStocksResult   = fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider,        usCodes)      ?: return
-            val cryptoResult     = fetchQuotesIfActive(StockerMarketType.Crypto,   cryptoQuoteProvider,  cryptoCodes)  ?: return
-            val futuresResult    = fetchQuotesIfActive(StockerMarketType.Futures,  StockerQuoteProvider.SINA, futuresCodes) ?: return
+            // Fetch all market data (with same-tick failover to the other provider)
+            val aShareResult     = fetchWithFailover(StockerMarketType.AShare,   quoteProvider,        aShareCodes)  ?: return
+            val hkStocksResult   = fetchWithFailover(StockerMarketType.HKStocks, quoteProvider,        hkCodes)      ?: return
+            val usStocksResult   = fetchWithFailover(StockerMarketType.USStocks, quoteProvider,        usCodes)      ?: return
+            val cryptoResult     = fetchWithFailover(StockerMarketType.Crypto,   cryptoQuoteProvider,  cryptoCodes)  ?: return
+            val futuresResult    = fetchWithFailover(StockerMarketType.Futures,  StockerQuoteProvider.SINA, futuresCodes) ?: return
 
-            val aShareIdxResult  = fetchQuotesIfActive(StockerMarketType.AShare,   quoteProvider,        StockerMarketIndex.CN.codes)     ?: return
-            val hkStocksIdxResult= fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider,        StockerMarketIndex.HK.codes)     ?: return
-            val usStocksIdxResult= fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider,        StockerMarketIndex.US.codes)     ?: return
-            val cryptoIdxResult  = fetchQuotesIfActive(StockerMarketType.Crypto,   cryptoQuoteProvider,  StockerMarketIndex.Crypto.codes) ?: return
+            val aShareIdxResult  = fetchWithFailover(StockerMarketType.AShare,   quoteProvider,        StockerMarketIndex.CN.codes)     ?: return
+            val hkStocksIdxResult= fetchWithFailover(StockerMarketType.HKStocks, quoteProvider,        StockerMarketIndex.HK.codes)     ?: return
+            val usStocksIdxResult= fetchWithFailover(StockerMarketType.USStocks, quoteProvider,        StockerMarketIndex.US.codes)     ?: return
+            val cryptoIdxResult  = fetchWithFailover(StockerMarketType.Crypto,   cryptoQuoteProvider,  StockerMarketIndex.Crypto.codes) ?: return
 
             val allResults = listOf(
                 aShareResult, hkStocksResult, usStocksResult, cryptoResult, futuresResult,
@@ -360,6 +360,27 @@ class StockerApp {
             return null
         }
         return StockerQuoteHttpUtil.get(marketType, quoteProvider, codes)
+    }
+
+    /**
+     * Fetch from [primary]; on failure retry once with the other provider in the same
+     * tick (when it supports the market). The primary stays authoritative — the next
+     * tick tries it again first, so recovery is automatic. Null still means "shutting
+     * down, abandon the tick".
+     */
+    private fun fetchWithFailover(
+        marketType: StockerMarketType,
+        primary: StockerQuoteProvider,
+        codes: List<String>
+    ): Result<List<StockerQuote>>? {
+        val first = fetchQuotesIfActive(marketType, primary, codes) ?: return null
+        if (first.isSuccess) return first
+        val fallback = primary.fallback()
+        if (!fallback.supports(marketType)) return first
+        val log = Logger.getInstance(StockerApp::class.java)
+        log.info("quote fetch failed on ${primary.name} for $marketType; retrying via ${fallback.name}")
+        val second = fetchQuotesIfActive(marketType, fallback, codes) ?: return null
+        return if (second.isSuccess) second else first
     }
 
     private fun shouldContinueRefresh(): Boolean {

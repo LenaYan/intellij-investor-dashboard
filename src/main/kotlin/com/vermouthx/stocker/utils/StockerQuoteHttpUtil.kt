@@ -87,9 +87,7 @@ object StockerQuoteHttpUtil {
 
         val url = "${quoteProvider.host}${codesParam}"
         val httpGet = HttpGet(url)
-        if (quoteProvider == StockerQuoteProvider.SINA) {
-            httpGet.setHeader("Referer", "https://finance.sina.com.cn")
-        }
+        quoteProvider.extraHeaders().forEach { (name, value) -> httpGet.setHeader(name, value) }
         return try {
             httpClientPool.client().execute(httpGet).use { response ->
                 val responseText = EntityUtils.toString(response.entity, "UTF-8")
@@ -203,20 +201,10 @@ object StockerQuoteHttpUtil {
                 return false
             }
             val httpGet = HttpGet("${quoteProvider.host}$symbol")
-            if (quoteProvider == StockerQuoteProvider.SINA) {
-                httpGet.setHeader("Referer", "https://finance.sina.com.cn")
-            }
+            quoteProvider.extraHeaders().forEach { (name, value) -> httpGet.setHeader(name, value) }
             httpClientPool.client().execute(httpGet).use { response ->
                 val responseText = EntityUtils.toString(response.entity, "UTF-8")
-                when (quoteProvider) {
-                    StockerQuoteProvider.SINA -> {
-                        val firstLine = responseText.split("\n")[0]
-                        val start = firstLine.indexOfFirst { it == '"' } + 1
-                        val end = firstLine.indexOfLast { it == '"' }
-                        start != end && firstLine.subSequence(start, end).contains(",")
-                    }
-                    StockerQuoteProvider.TENCENT -> !responseText.startsWith("v_pv_none_match")
-                }
+                quoteProvider.isValidCodeResponse(responseText)
             }
         } catch (e: Exception) {
             log.warn(e)
