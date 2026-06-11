@@ -41,6 +41,7 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
         val netProfitCol = StockerTableModelUtil.colOf(model, StockerTableColumn.NET_PROFIT)
         val healthCol    = StockerTableModelUtil.colOf(model, StockerTableColumn.HEALTH)
         val distanceCol  = StockerTableModelUtil.colOf(model, StockerTableColumn.DISTANCE)
+        val updateTimeCol = StockerTableModelUtil.colOf(model, StockerTableColumn.UPDATE_TIME)
 
         // Hold the lock for the whole batch — previously each quote re-acquired it.
         synchronized(model) {
@@ -68,6 +69,7 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
                         StockerTableModelUtil.setIfChanged(model, rowIndex, healthCol, formatHealthBadge(code))
                         StockerTableModelUtil.setIfChanged(model, rowIndex, distanceCol,
                             FinanceDistanceAnnotator.encode(FinanceDistanceAnnotator.annotate(code, quote.current)))
+                        StockerTableModelUtil.setIfChanged(model, rowIndex, updateTimeCol, formatUpdateTime(quote.updateAt))
                     } finally {
                         model.fireTableRowsUpdated(rowIndex, rowIndex)
                     }
@@ -221,7 +223,20 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
                 row[14] = FinanceDistanceAnnotator.encode(
                     FinanceDistanceAnnotator.annotate(quote.code, quote.current))
             }
+            if (columnCount > 15) row[15] = formatUpdateTime(quote.updateAt)
             return row
+        }
+
+        /**
+         * Canonical "yyyy-MM-dd HH:mm:ss" stamps collapse to the time part; provider-specific
+         * formats (e.g. Sina's US strings) are shown as-is rather than mis-sliced.
+         */
+        private fun formatUpdateTime(updateAt: String): String {
+            return if (updateAt.length == 19 && updateAt[4] == '-' && updateAt[10] == ' ') {
+                updateAt.substring(11)
+            } else {
+                updateAt
+            }
         }
     }
 }

@@ -332,7 +332,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             arrayOf(
                 CODE_COL, NAME_COL, CURRENT_COL, OPENING_COL, CLOSE_COL, LOW_COL, HIGH_COL,
                 CHANGE_COL, PERCENT_COL, COST_PRICE_COL, HOLDINGS_COL, NET_PROFIT_COL,
-                SPARKLINE_COL, HEALTH_COL, DISTANCE_COL,
+                SPARKLINE_COL, HEALTH_COL, DISTANCE_COL, UPDATE_TIME_COL,
             )
         )
 
@@ -1071,6 +1071,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
         private val SPARKLINE_COL = StockerTableColumn.SPARKLINE.name
         private val HEALTH_COL = StockerTableColumn.HEALTH.name
         private val DISTANCE_COL = StockerTableColumn.DISTANCE.name
+        private val UPDATE_TIME_COL = StockerTableColumn.UPDATE_TIME.name
         private val allColumnNames: List<String> = StockerTableColumn.entries.map { it.name }
 
         @JvmStatic

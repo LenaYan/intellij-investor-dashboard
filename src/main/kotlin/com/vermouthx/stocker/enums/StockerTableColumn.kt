@@ -18,7 +18,8 @@ enum class StockerTableColumn(val titleKey: String) {
     NET_PROFIT("column.net.profit"),
     SPARKLINE("column.sparkline"),
     HEALTH("column.health"),
-    DISTANCE("column.distance");
+    DISTANCE("column.distance"),
+    UPDATE_TIME("column.update.time");
 
     val title: String
         get() = StockerBundle.message(titleKey)
