@@ -153,49 +153,10 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
         removeFavorite(market, code)
     }
 
-    // ── Legacy per-market accessors (for migration compatibility) ───────────────
-
-    var aShareList: MutableList<String>
-        get() = codesByMarket(StockerMarketType.AShare).toMutableList()
-        set(value) {
-            clearMarket(StockerMarketType.AShare)
-            value.forEach { addFavorite(StockerMarketType.AShare, it) }
-        }
-
-    var hkStocksList: MutableList<String>
-        get() = codesByMarket(StockerMarketType.HKStocks).toMutableList()
-        set(value) {
-            clearMarket(StockerMarketType.HKStocks)
-            value.forEach { addFavorite(StockerMarketType.HKStocks, it) }
-        }
-
-    var usStocksList: MutableList<String>
-        get() = codesByMarket(StockerMarketType.USStocks).toMutableList()
-        set(value) {
-            clearMarket(StockerMarketType.USStocks)
-            value.forEach { addFavorite(StockerMarketType.USStocks, it) }
-        }
-
-    var cryptoList: MutableList<String>
-        get() = codesByMarket(StockerMarketType.Crypto).toMutableList()
-        set(value) {
-            clearMarket(StockerMarketType.Crypto)
-            value.forEach { addFavorite(StockerMarketType.Crypto, it) }
-        }
-
-    var futuresList: MutableList<String>
-        get() = codesByMarket(StockerMarketType.Futures).toMutableList()
-        set(value) {
-            clearMarket(StockerMarketType.Futures)
-            value.forEach { addFavorite(StockerMarketType.Futures, it) }
-        }
-
-    private fun clearMarket(market: StockerMarketType) {
-        val prefix = "${market.persistedId}:"
-        myState.favoritesList.removeAll { it.startsWith(prefix) }
-    }
-
-    // ────────────────────────────────────────────────────────────────────────────
+    // Legacy per-market accessors (aShareList, hkStocksList, …) were removed: nothing
+    // outside this class read them since the unified favoritesList migration. The raw
+    // fields remain in StockerSettingState only so migrateLegacyListsIfNeeded() can
+    // still deserialize pre-migration XML.
 
     var customStockNames: MutableMap<String, String>
         get() = myState.customStockNames

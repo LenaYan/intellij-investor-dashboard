@@ -1,5 +1,6 @@
 package com.vermouthx.stocker.listeners
 
+import com.vermouthx.stocker.StockerBundle
 import com.vermouthx.stocker.entities.StockerQuote
 import com.vermouthx.stocker.enums.StockerTableColumn
 import com.vermouthx.stocker.finance.FinanceBridgeService
@@ -131,58 +132,59 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
                         tip.append(entry.name).append(" (").append(entry.symbol).append(")\n")
                     }
                     if (entry.sector != null) {
-                        tip.append("行业: ").append(entry.sector).append("\n")
+                        tip.append(StockerBundle.message("health.tooltip.sector", entry.sector)).append('\n')
                     }
                     if (entry.targetZoneLow != null && entry.targetZoneHigh != null) {
-                        tip.append("target: ¥").append(entry.targetZoneLow)
-                            .append(" – ¥").append(entry.targetZoneHigh).append("\n")
+                        tip.append(StockerBundle.message("health.tooltip.target", entry.targetZoneLow, entry.targetZoneHigh)).append('\n')
                     }
                     if (entry.trigger != null) {
-                        tip.append("trigger: ").append(entry.trigger).append("\n")
+                        tip.append(StockerBundle.message("health.tooltip.trigger", entry.trigger)).append('\n')
                     }
                 }
                 if (rec != null) {
                     tip.append("──── entry-timing ────\n")
                     if (rec.grade != null) {
-                        tip.append("grade: ").append(rec.grade)
+                        tip.append(StockerBundle.message("health.tooltip.grade", rec.grade))
                         if (rec.entryType != null) tip.append(" · ").append(rec.entryType)
                         tip.append('\n')
                     }
                     if (rec.triggerPrice != null) {
-                        tip.append("trigger: ¥").append(String.format("%.2f", rec.triggerPrice)).append('\n')
+                        tip.append(StockerBundle.message("health.tooltip.trigger", String.format("¥%.2f", rec.triggerPrice))).append('\n')
                     }
                     if (rec.invalidationPrice != null) {
-                        tip.append("失效价: ¥").append(String.format("%.2f", rec.invalidationPrice)).append('\n')
+                        tip.append(StockerBundle.message("health.tooltip.invalidation", String.format("¥%.2f", rec.invalidationPrice))).append('\n')
                     }
                     if (rec.firstPositionPct != null) {
-                        tip.append("首仓: ").append(rec.firstPositionPct).append("%")
-                        if (rec.addSchedule != null) tip.append(" · 加仓 ").append(rec.addSchedule)
+                        tip.append(StockerBundle.message("health.tooltip.first.position", rec.firstPositionPct))
+                        if (rec.addSchedule != null) {
+                            tip.append(" · ").append(StockerBundle.message("health.tooltip.add.schedule", rec.addSchedule))
+                        }
                         tip.append('\n')
                     }
                     if (rec.alignedThread != null) {
-                        tip.append("主线: ").append(rec.alignedThread)
+                        tip.append(StockerBundle.message("health.tooltip.thread", rec.alignedThread))
                         if (rec.threadPhase != null) tip.append(" (").append(rec.threadPhase).append(")")
                         tip.append('\n')
                     }
                 }
                 val glyph = when (h) {
                     FinanceState.Health.GREEN -> {
-                        if (tip.isEmpty()) tip.append("持仓 thesis 良好")
+                        if (tip.isEmpty()) tip.append(StockerBundle.message("health.tooltip.green"))
                         "G"
                     }
                     FinanceState.Health.YELLOW -> {
-                        if (tip.isEmpty()) tip.append("接近触发 / thesis 偏离 1-2")
-                        else tip.insert(0, "状态: 关注（接近触发或 thesis 偏离 1-2）\n")
+                        if (tip.isEmpty()) tip.append(StockerBundle.message("health.tooltip.yellow"))
+                        else tip.insert(0, StockerBundle.message("health.tooltip.yellow.prefix") + "\n")
                         "Y"
                     }
                     FinanceState.Health.RED -> {
-                        if (tip.isEmpty()) tip.append("触发止损 / thesis 偏离 ≥3")
-                        else tip.insert(0, "状态: 警戒（已触发或 thesis 偏离 ≥3）\n")
+                        if (tip.isEmpty()) tip.append(StockerBundle.message("health.tooltip.red"))
+                        else tip.insert(0, StockerBundle.message("health.tooltip.red.prefix") + "\n")
                         "R"
                     }
                     FinanceState.Health.UNKNOWN -> {
                         if (entry == null && rec == null) return null
-                        if (tip.isEmpty()) tip.append("已收录至 finance/，暂无 position-risk-monitor / entry-timing 报告")
+                        if (tip.isEmpty()) tip.append(StockerBundle.message("health.tooltip.unknown"))
                         "-"
                     }
                 }
