@@ -27,6 +27,9 @@ class StockerSettingState {
     var stockCostPrices: MutableMap<String, Double> = mutableMapOf()
     var stockHoldings: MutableMap<String, Int> = mutableMapOf()
     var focusedStocks: MutableSet<String> = mutableSetOf()
+    // One-shot price alerts per canonical code; an entry is removed when it fires.
+    var stockAlertsAbove: MutableMap<String, Double> = mutableMapOf()
+    var stockAlertsBelow: MutableMap<String, Double> = mutableMapOf()
 
     // ── Finance Bridge (~/Claude/finance integration) ─────────────────────────
     /** Master switch. If true *and* financeBaseDir exists, Stocker reads watchlist/portfolio/reports. */

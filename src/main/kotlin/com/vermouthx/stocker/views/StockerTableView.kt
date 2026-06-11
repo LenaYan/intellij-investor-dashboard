@@ -423,6 +423,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
         }
 
         val focusMenuItem = newItem(null) { toggleFocusSelectedStock() }
+        val priceAlertItem = newItem(StockerBundle.message("menu.price.alert")) { setPriceAlertForSelectedStock() }
         val addWatchlistItem = newItem(StockerBundle.message("menu.add.to.claude.watchlist")) { addSelectedToClaudeWatchlist() }
         val entryTimingItem = newItem(StockerBundle.message("menu.view.entry.timing")) { showSelectedEntryTimingPlan() }
         val bullBearItem = newItem(StockerBundle.message("menu.view.bull.bear")) { showSelectedBullBear() }
@@ -442,7 +443,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             JBColor.namedColor("List.selectionForeground", tbBody.selectionForeground),
         )
 
-        val items = listOfNotNull(focusMenuItem, addWatchlistItem, entryTimingItem, bullBearItem, styleJuryItem, deleteMenuItem)
+        val items = listOfNotNull(focusMenuItem, priceAlertItem, addWatchlistItem, entryTimingItem, bullBearItem, styleJuryItem, deleteMenuItem)
         for (item in items) {
             item.background = defaultBackground
             item.foreground = defaultForeground
@@ -467,6 +468,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             override fun popupMenuCanceled(e: PopupMenuEvent) = clearPopupStateLater(popupMenu)
         })
         popupMenu.add(focusMenuItem)
+        popupMenu.add(priceAlertItem)
         popupMenu.addSeparator()
         popupMenu.add(addWatchlistItem)
         popupMenu.add(entryTimingItem)
@@ -498,6 +500,13 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             action(code, name)
         } finally {
             clearPopupTarget()
+        }
+    }
+
+    private fun setPriceAlertForSelectedStock() = withSelectedRow { code, name ->
+        val dialog = com.vermouthx.stocker.views.dialogs.StockerPriceAlertDialog(code, name)
+        if (dialog.showAndGet()) {
+            StockerSetting.instance.setPriceAlerts(code, dialog.aboveValue, dialog.belowValue)
         }
     }
 

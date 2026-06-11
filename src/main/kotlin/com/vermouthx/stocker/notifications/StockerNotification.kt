@@ -140,6 +140,23 @@ object StockerNotification {
     private const val GITHUB_LINK = "https://github.com/WhiteVermouth/intellij-investor-dashboard"
     private const val DONATE_LINK = "https://www.buymeacoffee.com/nszihan"
 
+    /**
+     * One-shot price-alert balloon. Fired from the refresh executor; the
+     * notification bus is thread-safe so no EDT hop is needed here.
+     */
+    fun notifyPriceAlert(code: String, name: String, current: Double, threshold: Double, crossedAbove: Boolean) {
+        val key = if (crossedAbove) "alert.notification.above" else "alert.notification.below"
+        val content = com.vermouthx.stocker.StockerBundle.message(key, name, code, threshold, current)
+        val notification = NotificationGroupManager.getInstance().getNotificationGroup(NOTIFICATION_GROUP_ID)
+            .createNotification(
+                com.vermouthx.stocker.StockerBundle.message("alert.notification.title"),
+                content,
+                NotificationType.INFORMATION
+            )
+        notification.icon = notificationIcon
+        notification.notify(null)
+    }
+
     fun notifyReleaseNote(project: Project) {
         val title = if (isChinese()) "Stocker v${version} - 版本说明" else "Stocker v${version} - Release Notes"
         val notification = NotificationGroupManager.getInstance().getNotificationGroup(NOTIFICATION_GROUP_ID)

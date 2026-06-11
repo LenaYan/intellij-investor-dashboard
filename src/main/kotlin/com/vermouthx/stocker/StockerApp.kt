@@ -12,6 +12,7 @@ import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.Companion.STOC
 import com.vermouthx.stocker.listeners.StockerRefreshState
 import com.vermouthx.stocker.listeners.StockerRefreshStatus
 import com.vermouthx.stocker.listeners.StockerRefreshStatusNotifier.Companion.REFRESH_STATUS_TOPIC
+import com.vermouthx.stocker.notifications.StockerNotification
 import com.vermouthx.stocker.settings.StockerSetting
 import com.vermouthx.stocker.utils.StockerIntradayCache
 import com.vermouthx.stocker.utils.StockerMarketSession
@@ -214,6 +215,8 @@ class StockerApp {
             allPublisher.syncQuotes(allStockQuotes, allStockQuotes.size)
             allPublisher.syncIndices(allStockIndices)
 
+            checkPriceAlerts(allStockQuotes)
+
             if (anyFailure) {
                 consecutiveFailures++
                 if (consecutiveFailures >= 3) {
@@ -237,6 +240,29 @@ class StockerApp {
                 lastSuccessAt = Instant.now()
                 publishStatus(if (offHours) StockerRefreshState.OFF_HOURS else StockerRefreshState.LIVE)
             }
+    }
+
+    /**
+     * One-shot alerts: fire when the live price reaches the stored threshold, then
+     * clear so the balloon appears exactly once. Zero prices (suspended symbols)
+     * never trigger the below-threshold direction.
+     */
+    private fun checkPriceAlerts(quotes: List<StockerQuote>) {
+        if (!setting.hasAnyPriceAlert()) return
+        for (quote in quotes) {
+            setting.getAlertAbove(quote.code)?.let { threshold ->
+                if (quote.current >= threshold) {
+                    setting.clearAlertAbove(quote.code)
+                    StockerNotification.notifyPriceAlert(quote.code, quote.name, quote.current, threshold, true)
+                }
+            }
+            setting.getAlertBelow(quote.code)?.let { threshold ->
+                if (quote.current > 0 && quote.current <= threshold) {
+                    setting.clearAlertBelow(quote.code)
+                    StockerNotification.notifyPriceAlert(quote.code, quote.name, quote.current, threshold, false)
+                }
+            }
+        }
     }
 
     private fun publishStatus(state: StockerRefreshState) {

@@ -310,6 +310,32 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
 
     // ────────────────────────────────────────────────────────────────────────────
 
+    // ── Price alerts (one-shot) ─────────────────────────────────────────────────
+
+    fun getAlertAbove(code: String): Double? = myState.stockAlertsAbove[code]
+
+    fun getAlertBelow(code: String): Double? = myState.stockAlertsBelow[code]
+
+    fun hasAnyPriceAlert(): Boolean =
+        myState.stockAlertsAbove.isNotEmpty() || myState.stockAlertsBelow.isNotEmpty()
+
+    /** Null clears the corresponding threshold. */
+    fun setPriceAlerts(code: String, above: Double?, below: Double?) {
+        if (above != null) myState.stockAlertsAbove[code] = above else myState.stockAlertsAbove.remove(code)
+        if (below != null) myState.stockAlertsBelow[code] = below else myState.stockAlertsBelow.remove(code)
+        log.info("Price alerts for $code: above=$above below=$below")
+    }
+
+    fun clearAlertAbove(code: String) {
+        myState.stockAlertsAbove.remove(code)
+    }
+
+    fun clearAlertBelow(code: String) {
+        myState.stockAlertsBelow.remove(code)
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────
+
     fun setCustomName(code: String, customName: String) {
         customStockNames[code] = customName
         log.info("Custom name set for $code: $customName")
