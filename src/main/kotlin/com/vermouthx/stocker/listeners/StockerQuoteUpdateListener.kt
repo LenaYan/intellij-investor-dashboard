@@ -13,6 +13,7 @@ import com.vermouthx.stocker.utils.StockerNumberFormat
 import com.vermouthx.stocker.utils.StockerTableModelUtil
 import com.vermouthx.stocker.views.StockerTableView
 import javax.swing.SwingUtilities
+import javax.swing.table.DefaultTableModel
 
 class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : StockerQuoteUpdateNotifier {
 
@@ -24,25 +25,29 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
         }
     }
 
+    /** Model column indices resolved by name once per batch — never hardcoded positions. */
+    private class QuoteColumns(model: DefaultTableModel) {
+        val symbol     = StockerTableModelUtil.colOf(model, StockerTableColumn.SYMBOL)
+        val name       = StockerTableModelUtil.colOf(model, StockerTableColumn.NAME)
+        val current    = StockerTableModelUtil.colOf(model, StockerTableColumn.CURRENT)
+        val opening    = StockerTableModelUtil.colOf(model, StockerTableColumn.OPENING)
+        val close      = StockerTableModelUtil.colOf(model, StockerTableColumn.CLOSE)
+        val low        = StockerTableModelUtil.colOf(model, StockerTableColumn.LOW)
+        val high       = StockerTableModelUtil.colOf(model, StockerTableColumn.HIGH)
+        val change     = StockerTableModelUtil.colOf(model, StockerTableColumn.CHANGE)
+        val percent    = StockerTableModelUtil.colOf(model, StockerTableColumn.CHANGE_PERCENT)
+        val costPrice  = StockerTableModelUtil.colOf(model, StockerTableColumn.COST_PRICE)
+        val holdings   = StockerTableModelUtil.colOf(model, StockerTableColumn.HOLDINGS)
+        val netProfit  = StockerTableModelUtil.colOf(model, StockerTableColumn.NET_PROFIT)
+        val health     = StockerTableModelUtil.colOf(model, StockerTableColumn.HEALTH)
+        val distance   = StockerTableModelUtil.colOf(model, StockerTableColumn.DISTANCE)
+        val updateTime = StockerTableModelUtil.colOf(model, StockerTableColumn.UPDATE_TIME)
+    }
+
     private fun applyQuotes(quotes: List<StockerQuote>, size: Int) {
         val model = myTableView.tableModel
         val setting = StockerSetting.instance
-
-        // Resolve column indices once — they don't change inside this batch.
-        val nameCol      = StockerTableModelUtil.colOf(model, StockerTableColumn.NAME)
-        val currentCol   = StockerTableModelUtil.colOf(model, StockerTableColumn.CURRENT)
-        val openingCol   = StockerTableModelUtil.colOf(model, StockerTableColumn.OPENING)
-        val closeCol     = StockerTableModelUtil.colOf(model, StockerTableColumn.CLOSE)
-        val lowCol       = StockerTableModelUtil.colOf(model, StockerTableColumn.LOW)
-        val highCol      = StockerTableModelUtil.colOf(model, StockerTableColumn.HIGH)
-        val changeCol    = StockerTableModelUtil.colOf(model, StockerTableColumn.CHANGE)
-        val percentCol   = StockerTableModelUtil.colOf(model, StockerTableColumn.CHANGE_PERCENT)
-        val costPriceCol = StockerTableModelUtil.colOf(model, StockerTableColumn.COST_PRICE)
-        val holdingsCol  = StockerTableModelUtil.colOf(model, StockerTableColumn.HOLDINGS)
-        val netProfitCol = StockerTableModelUtil.colOf(model, StockerTableColumn.NET_PROFIT)
-        val healthCol    = StockerTableModelUtil.colOf(model, StockerTableColumn.HEALTH)
-        val distanceCol  = StockerTableModelUtil.colOf(model, StockerTableColumn.DISTANCE)
-        val updateTimeCol = StockerTableModelUtil.colOf(model, StockerTableColumn.UPDATE_TIME)
+        val cols = QuoteColumns(model)
 
         // Hold the lock for the whole batch — previously each quote re-acquired it.
         synchronized(model) {
@@ -59,24 +64,24 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
                     // setIfChanged emits one cell-updated event per actually changed cell
                     // (via DefaultTableModel.setValueAt); no row-level fire on top, so an
                     // unchanged row costs zero repaints per tick.
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, nameCol, displayName)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, currentCol, quote.current)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, openingCol, quote.opening)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, closeCol, quote.close)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, lowCol, quote.low)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, highCol, quote.high)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, changeCol, quote.change)
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, percentCol, "${quote.percentage}%")
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, costPriceCol, StockerNumberFormat.formatPrice(costPrice))
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, holdingsCol, StockerNumberFormat.formatHoldings(holdings))
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, netProfitCol,
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.name, displayName)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.current, quote.current)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.opening, quote.opening)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.close, quote.close)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.low, quote.low)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.high, quote.high)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.change, quote.change)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.percent, "${quote.percentage}%")
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.costPrice, StockerNumberFormat.formatPrice(costPrice))
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.holdings, StockerNumberFormat.formatHoldings(holdings))
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.netProfit,
                         StockerNumberFormat.formatNetProfit(quote.current, costPrice, holdings))
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, healthCol, formatHealthBadge(code))
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, distanceCol,
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.health, formatHealthBadge(code))
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.distance,
                         FinanceDistanceAnnotator.encode(FinanceDistanceAnnotator.annotate(code, quote.current)))
-                    StockerTableModelUtil.setIfChanged(model, rowIndex, updateTimeCol, formatUpdateTime(quote.updateAt))
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, cols.updateTime, formatUpdateTime(quote.updateAt))
                 } else if (quotes.size <= size) {
-                    model.addRow(buildRow(quote, displayName, costPrice, holdings, model.columnCount))
+                    model.addRow(buildRow(quote, displayName, costPrice, holdings, model.columnCount, cols))
                     rowByCode[code] = model.rowCount - 1
                     myTableView.clearSortState()
                 }
@@ -199,9 +204,10 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
         }
 
         /**
-         * Build a new row in canonical column order. The model is initialized with all columns
-         * present (StockerTableView.initTable), so we can assume canonical indices here.
-         * If a column is later removed from the model entirely, the corresponding cell stays null.
+         * Build a new row with cells placed by resolved column index — no positional
+         * assumptions about the enum order. Columns absent from the model resolve to -1
+         * and their values are dropped; the sparkline cell stays null until the
+         * intraday fetch populates it.
          */
         private fun buildRow(
             quote: StockerQuote,
@@ -209,27 +215,28 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
             costPrice: Double?,
             holdings: Int?,
             columnCount: Int,
+            cols: QuoteColumns,
         ): Array<Any?> {
             val row = arrayOfNulls<Any?>(columnCount)
-            row[0] = quote.code
-            row[1] = displayName
-            row[2] = quote.current
-            row[3] = quote.opening
-            row[4] = quote.close
-            row[5] = quote.low
-            row[6] = quote.high
-            row[7] = quote.change
-            row[8] = "${quote.percentage}%"
-            row[9] = StockerNumberFormat.formatPrice(costPrice)
-            row[10] = StockerNumberFormat.formatHoldings(holdings)
-            row[11] = StockerNumberFormat.formatNetProfit(quote.current, costPrice, holdings)
-            // row[12] sparkline data populated by intraday fetch
-            if (columnCount > 13) row[13] = formatHealthBadge(quote.code)
-            if (columnCount > 14) {
-                row[14] = FinanceDistanceAnnotator.encode(
-                    FinanceDistanceAnnotator.annotate(quote.code, quote.current))
+            fun put(col: Int, value: Any?) {
+                if (col in 0 until columnCount) row[col] = value
             }
-            if (columnCount > 15) row[15] = formatUpdateTime(quote.updateAt)
+            put(cols.symbol, quote.code)
+            put(cols.name, displayName)
+            put(cols.current, quote.current)
+            put(cols.opening, quote.opening)
+            put(cols.close, quote.close)
+            put(cols.low, quote.low)
+            put(cols.high, quote.high)
+            put(cols.change, quote.change)
+            put(cols.percent, "${quote.percentage}%")
+            put(cols.costPrice, StockerNumberFormat.formatPrice(costPrice))
+            put(cols.holdings, StockerNumberFormat.formatHoldings(holdings))
+            put(cols.netProfit, StockerNumberFormat.formatNetProfit(quote.current, costPrice, holdings))
+            put(cols.health, formatHealthBadge(quote.code))
+            put(cols.distance, FinanceDistanceAnnotator.encode(
+                FinanceDistanceAnnotator.annotate(quote.code, quote.current)))
+            put(cols.updateTime, formatUpdateTime(quote.updateAt))
             return row
         }
 
