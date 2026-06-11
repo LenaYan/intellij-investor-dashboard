@@ -2,6 +2,7 @@ package com.vermouthx.stocker
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.util.concurrency.AppExecutorUtil
 import com.vermouthx.stocker.entities.StockerQuote
 import com.vermouthx.stocker.enums.StockerMarketIndex
 import com.vermouthx.stocker.enums.StockerMarketType
@@ -14,6 +15,7 @@ import com.vermouthx.stocker.listeners.StockerRefreshStatus
 import com.vermouthx.stocker.listeners.StockerRefreshStatusNotifier.Companion.REFRESH_STATUS_TOPIC
 import com.vermouthx.stocker.notifications.StockerNotification
 import com.vermouthx.stocker.settings.StockerSetting
+import com.vermouthx.stocker.utils.StockerCodeMarketGrouper
 import com.vermouthx.stocker.utils.StockerIntradayCache
 import com.vermouthx.stocker.utils.StockerMarketSession
 import com.vermouthx.stocker.utils.StockerQuoteHttpUtil
@@ -147,7 +149,10 @@ class StockerApp {
             }
 
             val now = Instant.now()
-            val offHours = !anyRelevantMarketOpen(now)
+            // Single watchlist snapshot per tick — shared by the open-market check,
+            // the per-market fetch union, and nothing else rebuilds it.
+            val watchlistByMarket = FinanceBridgeService.instance.watchlistCodesByMarket()
+            val offHours = !anyRelevantMarketOpen(now, watchlistByMarket)
             if (offHours) {
                 val ticksPerMinute = (60L / setting.refreshInterval.coerceAtLeast(1L)).coerceAtLeast(1L)
                 val skipThisTick = offHoursTickCounter % ticksPerMinute != 0L
@@ -169,24 +174,36 @@ class StockerApp {
             val cryptoQuoteProvider = setting.cryptoQuoteProvider
 
             // Get per-market codes from unified favorites list
-            val watchlistByMarket = FinanceBridgeService.instance.watchlistCodesByMarket()
             val aShareCodes = unionCodes(setting.codesByMarket(StockerMarketType.AShare), watchlistByMarket[StockerMarketType.AShare])
             val hkCodes     = unionCodes(setting.codesByMarket(StockerMarketType.HKStocks), watchlistByMarket[StockerMarketType.HKStocks])
             val usCodes     = unionCodes(setting.codesByMarket(StockerMarketType.USStocks), watchlistByMarket[StockerMarketType.USStocks])
             val cryptoCodes = setting.codesByMarket(StockerMarketType.Crypto)
             val futuresCodes = setting.codesByMarket(StockerMarketType.Futures)
 
-            // Fetch all market data (with same-tick failover to the other provider)
-            val aShareResult     = fetchWithFailover(StockerMarketType.AShare,   quoteProvider,        aShareCodes)  ?: return
-            val hkStocksResult   = fetchWithFailover(StockerMarketType.HKStocks, quoteProvider,        hkCodes)      ?: return
-            val usStocksResult   = fetchWithFailover(StockerMarketType.USStocks, quoteProvider,        usCodes)      ?: return
-            val cryptoResult     = fetchWithFailover(StockerMarketType.Crypto,   cryptoQuoteProvider,  cryptoCodes)  ?: return
-            val futuresResult    = fetchWithFailover(StockerMarketType.Futures,  StockerQuoteProvider.SINA, futuresCodes) ?: return
+            // Fetch all market data in parallel (each task keeps its own same-tick
+            // failover). Done serially, a tick's wall time was the sum of nine request
+            // latencies — easily longer than the shortest refresh interval.
+            val pool = AppExecutorUtil.getAppExecutorService()
+            val aShareFuture      = pool.submit<Result<List<StockerQuote>>?> { fetchWithFailover(StockerMarketType.AShare,   quoteProvider,       aShareCodes) }
+            val hkStocksFuture    = pool.submit<Result<List<StockerQuote>>?> { fetchWithFailover(StockerMarketType.HKStocks, quoteProvider,       hkCodes) }
+            val usStocksFuture    = pool.submit<Result<List<StockerQuote>>?> { fetchWithFailover(StockerMarketType.USStocks, quoteProvider,       usCodes) }
+            val cryptoFuture      = pool.submit<Result<List<StockerQuote>>?> { fetchWithFailover(StockerMarketType.Crypto,   cryptoQuoteProvider, cryptoCodes) }
+            val futuresFuture     = pool.submit<Result<List<StockerQuote>>?> { fetchWithFailover(StockerMarketType.Futures,  StockerQuoteProvider.SINA, futuresCodes) }
+            val aShareIdxFuture   = pool.submit<Result<List<StockerQuote>>?> { fetchWithFailover(StockerMarketType.AShare,   quoteProvider,       StockerMarketIndex.CN.codes) }
+            val hkStocksIdxFuture = pool.submit<Result<List<StockerQuote>>?> { fetchWithFailover(StockerMarketType.HKStocks, quoteProvider,       StockerMarketIndex.HK.codes) }
+            val usStocksIdxFuture = pool.submit<Result<List<StockerQuote>>?> { fetchWithFailover(StockerMarketType.USStocks, quoteProvider,       StockerMarketIndex.US.codes) }
+            val cryptoIdxFuture   = pool.submit<Result<List<StockerQuote>>?> { fetchWithFailover(StockerMarketType.Crypto,   cryptoQuoteProvider, StockerMarketIndex.Crypto.codes) }
 
-            val aShareIdxResult  = fetchWithFailover(StockerMarketType.AShare,   quoteProvider,        StockerMarketIndex.CN.codes)     ?: return
-            val hkStocksIdxResult= fetchWithFailover(StockerMarketType.HKStocks, quoteProvider,        StockerMarketIndex.HK.codes)     ?: return
-            val usStocksIdxResult= fetchWithFailover(StockerMarketType.USStocks, quoteProvider,        StockerMarketIndex.US.codes)     ?: return
-            val cryptoIdxResult  = fetchWithFailover(StockerMarketType.Crypto,   cryptoQuoteProvider,  StockerMarketIndex.Crypto.codes) ?: return
+            // Null result = shutting down mid-tick; abandon the whole tick.
+            val aShareResult      = aShareFuture.get()      ?: return
+            val hkStocksResult    = hkStocksFuture.get()    ?: return
+            val usStocksResult    = usStocksFuture.get()    ?: return
+            val cryptoResult      = cryptoFuture.get()      ?: return
+            val futuresResult     = futuresFuture.get()     ?: return
+            val aShareIdxResult   = aShareIdxFuture.get()   ?: return
+            val hkStocksIdxResult = hkStocksIdxFuture.get() ?: return
+            val usStocksIdxResult = usStocksIdxFuture.get() ?: return
+            val cryptoIdxResult   = cryptoIdxFuture.get()   ?: return
 
             val allResults = listOf(
                 aShareResult, hkStocksResult, usStocksResult, cryptoResult, futuresResult,
@@ -297,9 +314,19 @@ class StockerApp {
             if (!shouldContinueRefresh()) return
 
             val now = Instant.now()
-            if (!anyRelevantMarketOpen(now)) return
+            val watchlistByMarket = FinanceBridgeService.instance.watchlistCodesByMarket()
+            if (!anyRelevantMarketOpen(now, watchlistByMarket)) return
 
-            val visible = StockerTableView.visibleCodesByMarket()
+            val visibleCodes = StockerTableView.visibleCodes()
+            if (visibleCodes.isEmpty()) return
+            // Favorites resolve most codes; watchlist-only rows (fetched via the union in
+            // consolidatedTick but absent from favorites) resolve through the finance/
+            // watchlist so their sparklines update too.
+            val visible = StockerCodeMarketGrouper.group(
+                visibleCodes,
+                setting::marketOf,
+                watchlistByMarket,
+            )
             if (visible.isEmpty()) return
 
             val toBroadcast = HashMap<String, com.vermouthx.stocker.entities.StockerIntradayData>()
@@ -342,9 +369,10 @@ class StockerApp {
             if (intradayTickCounter % 10L == 0L) {
                 val keep = HashSet<String>()
                 visible.values.forEach { keep.addAll(it) }
-                keep.addAll(setting.codesByMarket(StockerMarketType.AShare))
-                keep.addAll(setting.codesByMarket(StockerMarketType.HKStocks))
-                keep.addAll(setting.codesByMarket(StockerMarketType.USStocks))
+                for (market in intradayMarkets) {
+                    keep.addAll(setting.codesByMarket(market))
+                    watchlistByMarket[market]?.let { keep.addAll(it) }
+                }
                 StockerIntradayCache.evict(keep)
             }
     }
@@ -360,8 +388,10 @@ class StockerApp {
      * throttle. Users who actually hold crypto codes still get full cadence via the
      * codes loop.
      */
-    private fun anyRelevantMarketOpen(now: Instant): Boolean {
-        val watchlistByMarket = FinanceBridgeService.instance.watchlistCodesByMarket()
+    private fun anyRelevantMarketOpen(
+        now: Instant,
+        watchlistByMarket: Map<StockerMarketType, List<String>>,
+    ): Boolean {
         for (market in StockerMarketType.entries) {
             val codes = setting.codesByMarket(market) +
                         (watchlistByMarket[market] ?: emptyList())
