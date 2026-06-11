@@ -124,6 +124,21 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
     fun removeFavorite(market: StockerMarketType, code: String) {
         val key = favoriteKey(market, code)
         myState.favoritesList.remove(key)
+        // Cascade: per-code attachments would otherwise pile up as orphans in
+        // stocker-config.xml. Only when the code left its last market — the same bare
+        // code may legitimately exist under another market.
+        if (!containsCode(code)) {
+            clearCodeAttachments(code)
+        }
+    }
+
+    private fun clearCodeAttachments(code: String) {
+        myState.customStockNames.remove(code)
+        myState.stockCostPrices.remove(code)
+        myState.stockHoldings.remove(code)
+        myState.stockAlertsAbove.remove(code)
+        myState.stockAlertsBelow.remove(code)
+        myState.focusedStocks.remove(code)
     }
 
     /** Check if a code exists in favorites for a specific market. */
