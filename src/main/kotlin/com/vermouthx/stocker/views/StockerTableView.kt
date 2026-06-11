@@ -1,10 +1,7 @@
 package com.vermouthx.stocker.views
 
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.ui.ComboBox
-import com.intellij.openapi.ui.Messages
 import com.intellij.ui.JBColor
-import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.table.JBTable
 import com.vermouthx.stocker.StockerBundle
@@ -23,42 +20,28 @@ import com.vermouthx.stocker.components.StockerTableHeaderRender
 import com.vermouthx.stocker.components.StockerTableModel
 import com.vermouthx.stocker.entities.StockerIntradayData
 import com.vermouthx.stocker.entities.StockerQuote
-import com.vermouthx.stocker.entities.StockerSuggestion
-import com.vermouthx.stocker.enums.StockerQuoteColorPattern
 import com.vermouthx.stocker.enums.StockerSortState
 import com.vermouthx.stocker.enums.StockerTableColumn
-import com.vermouthx.stocker.finance.FinanceEntryTimingActions
-import com.vermouthx.stocker.finance.FinanceReportActions
-import com.vermouthx.stocker.finance.FinanceWatchlistActions
 import com.vermouthx.stocker.settings.StockerSetting
-import com.vermouthx.stocker.utils.StockerActionUtil
 import com.vermouthx.stocker.utils.StockerNumberFormat
-import com.vermouthx.stocker.utils.StockerPinyinUtil
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Component
 import java.awt.Cursor
 import java.awt.Dimension
-import java.awt.Font
-import java.awt.GridLayout
 import java.awt.event.FocusAdapter
 import java.awt.event.FocusEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.util.Collections
 import javax.swing.BorderFactory
-import javax.swing.ButtonModel
 import javax.swing.JComponent
-import javax.swing.JMenuItem
 import javax.swing.JPanel
-import javax.swing.JPopupMenu
 import javax.swing.JScrollPane
 import javax.swing.JTable
 import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
 import javax.swing.UIManager
-import javax.swing.event.PopupMenuEvent
-import javax.swing.event.PopupMenuListener
 import javax.swing.plaf.basic.BasicTableHeaderUI
 import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.DefaultTableModel
@@ -73,11 +56,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
     private lateinit var tbBody: JBTable
     private lateinit var tbModel: StockerTableModel
 
-    private val cbIndex = ComboBox<String>()
-    private val lbIndexValue = JBLabel("", SwingConstants.CENTER)
-    private val lbIndexExtent = JBLabel("", SwingConstants.CENTER)
-    private val lbIndexPercent = JBLabel("", SwingConstants.CENTER)
-    private var indices: List<StockerQuote> = ArrayList()
+    private val indexPanel = StockerIndexPanel(colors)
 
     // Cache renderers to avoid creating new instances on every refresh
     private val defaultRenderer: StockerDefaultTableCellRender = StockerDefaultTableCellRender()
@@ -118,8 +97,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
         tableViews.remove(this)
 
         // Clear data structures to help with garbage collection
-        (indices as? MutableList<*>)?.clear()
-        indices = emptyList()
+        indexPanel.dispose()
         sortController?.dispose()
 
         // Clear table model
@@ -130,38 +108,8 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
 
     fun syncIndices(indices: List<StockerQuote>) {
         SwingUtilities.invokeLater {
-            this.indices = indices
-            val setting = StockerSetting.instance
-
-            var shouldRefresh = cbIndex.itemCount != indices.size
-            if (!shouldRefresh) {
-                for (i in indices.indices) {
-                    val displayName = setting.getDisplayName(indices[i].code, indices[i].name)
-                    if (displayName != cbIndex.getItemAt(i)) {
-                        shouldRefresh = true
-                        break
-                    }
-                }
-            }
-
-            if (shouldRefresh && indices.isNotEmpty()) {
-                val selectedDisplayName = cbIndex.selectedItem?.toString()
-                val selectedCode = findIndexCodeByDisplayName(selectedDisplayName, setting)
-                cbIndex.removeAllItems()
-                indices.forEach { cbIndex.addItem(setting.getDisplayName(it.code, it.name)) }
-                if (selectedCode != null) {
-                    for (i in indices.indices) {
-                        if (indices[i].code == selectedCode) {
-                            cbIndex.selectedIndex = i
-                            break
-                        }
-                    }
-                } else if (indices.isNotEmpty()) {
-                    cbIndex.selectedIndex = 0
-                }
-            }
             syncColorPatternSetting()
-            updateIndex()
+            indexPanel.applyIndices(indices)
         }
     }
 
@@ -218,40 +166,6 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
         sparklineRenderer.redUp = colors.redUp
     }
 
-    private fun updateIndex() {
-        if (cbIndex.selectedIndex == -1 || cbIndex.selectedItem == null) return
-        val selectedDisplayName = cbIndex.selectedItem.toString()
-        val setting = StockerSetting.instance
-        val selectedCode = findIndexCodeByDisplayName(selectedDisplayName, setting)
-
-        for (index in indices) {
-            val displayName = setting.getDisplayName(index.code, index.name)
-            val isSelected = if (selectedCode != null) index.code == selectedCode else displayName == selectedDisplayName
-            if (!isSelected) continue
-            lbIndexValue.text = index.current.toString()
-            lbIndexExtent.text = index.change.toString()
-            lbIndexPercent.text = "${index.percentage}%"
-            val color = colors.signColor(index.percentage, JBColor.foreground())
-            lbIndexValue.foreground = color
-            lbIndexExtent.foreground = color
-            lbIndexPercent.foreground = color
-            return
-        }
-    }
-
-    private fun findIndexCodeByDisplayName(displayName: String?, setting: StockerSetting): String? {
-        if (displayName.isNullOrEmpty()) return null
-        for (index in indices) {
-            val code = index.code
-            val customName = setting.getCustomName(code)
-            if (customName != null && customName == displayName) return code
-            val originalName = index.name
-            if (displayName == originalName) return code
-            if (displayName == StockerPinyinUtil.toPinyin(originalName)) return code
-        }
-        return null
-    }
-
     private fun initPane() {
         tbPane = JBScrollPane().apply {
             border = BorderFactory.createEmptyBorder()
@@ -264,27 +178,9 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
         }
         javax.swing.SwingUtilities.invokeLater { refreshVisibleSnapshot() }
 
-        val iPane = JPanel(GridLayout(1, 4, 8, 0)).apply {
-            border = BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1, 0, 0, 0, JBColor.border()),
-                BorderFactory.createEmptyBorder(8, 12, 8, 12),
-            )
-        }
-
-        // Style the index components
-        val indexFont = lbIndexValue.font.deriveFont(Font.BOLD, lbIndexValue.font.size + 1f)
-        lbIndexValue.font = indexFont
-        lbIndexExtent.font = indexFont
-        lbIndexPercent.font = indexFont
-
-        iPane.add(cbIndex)
-        iPane.add(lbIndexValue)
-        iPane.add(lbIndexExtent)
-        iPane.add(lbIndexPercent)
-        cbIndex.addItemListener { updateIndex() }
         mPane = JPanel(BorderLayout()).apply {
             add(tbPane, BorderLayout.CENTER)
-            add(iPane, BorderLayout.SOUTH)
+            add(indexPanel.component, BorderLayout.SOUTH)
         }
     }
 
@@ -410,7 +306,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
 
     fun refreshColorPattern() {
         syncColorPatternSetting()
-        updateIndex()
+        indexPanel.refreshIndexDisplay()
         tbBody.revalidate()
         tbBody.repaint()
     }
