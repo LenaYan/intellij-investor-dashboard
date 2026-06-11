@@ -18,6 +18,9 @@
         <statusBarWidgetFactory id="Stocker.FinanceStatusBar"
                                 implementation="com.vermouthx.stocker.finance.FinanceStatusBarWidgetFactory"
                                 order="last"/>
+        <statusBarWidgetFactory id="Stocker.FocusTicker"
+                                implementation="com.vermouthx.stocker.statusbar.StockerTickerWidgetFactory"
+                                order="last"/>
     </extensions>
     <projectListeners>
         <listener class="com.vermouthx.stocker.StockerAppManager$StockerProjectManagerListener" topic="com.intellij.openapi.project.ProjectManagerListener"/>
