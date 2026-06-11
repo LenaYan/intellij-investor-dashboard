@@ -11,10 +11,19 @@ import com.vermouthx.stocker.settings.StockerSetting
 import com.vermouthx.stocker.utils.StockerNumberFormat
 import com.vermouthx.stocker.utils.StockerTableModelUtil
 import com.vermouthx.stocker.views.StockerTableView
+import javax.swing.SwingUtilities
 
 class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : StockerQuoteUpdateNotifier {
 
     override fun syncQuotes(quotes: List<StockerQuote>, size: Int) {
+        // Quotes arrive on the refresh executor thread; Swing models must only be
+        // mutated on the EDT, so the whole batch is marshalled over in one hop.
+        SwingUtilities.invokeLater {
+            applyQuotes(quotes, size)
+        }
+    }
+
+    private fun applyQuotes(quotes: List<StockerQuote>, size: Int) {
         val model = myTableView.tableModel
         val setting = StockerSetting.instance
 
@@ -71,9 +80,8 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
     }
 
     override fun syncIndices(indices: List<StockerQuote>) {
-        synchronized(myTableView) {
-            myTableView.syncIndices(indices)
-        }
+        // StockerTableView.syncIndices marshals to the EDT itself.
+        myTableView.syncIndices(indices)
     }
 
     companion object {
