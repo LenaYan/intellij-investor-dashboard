@@ -1,10 +1,8 @@
 package com.vermouthx.stocker.views.windows
 
-import com.intellij.openapi.application.ApplicationActivationListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
-import com.intellij.openapi.wm.IdeFrame
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener
@@ -33,7 +31,6 @@ class StockerToolWindow : ToolWindowFactory {
     private var watchlistView: StockerSimpleToolWindow? = null
     private var watchlistRefreshListener: (() -> Unit)? = null
     @Volatile private var toolWindowVisible: Boolean = true
-    @Volatile private var ideActive: Boolean = true
     private var toolWindowId: String? = null
     private val messageBusConnections = mutableListOf<MessageBusConnection>()
 
@@ -108,22 +105,6 @@ class StockerToolWindow : ToolWindowFactory {
 
         toolWindowId = toolWindow.id
 
-        // IDE activation listener — application-level bus.
-        messageBusConnections.add(
-            ApplicationManager.getApplication().messageBus.connect().apply {
-                subscribe(ApplicationActivationListener.TOPIC, object : ApplicationActivationListener {
-                    override fun applicationActivated(ideFrame: IdeFrame) {
-                        ideActive = true
-                        applyPauseState()
-                    }
-                    override fun applicationDeactivated(ideFrame: IdeFrame) {
-                        ideActive = false
-                        applyPauseState()
-                    }
-                })
-            }
-        )
-
         // Tool-window visibility — project-level bus.
         messageBusConnections.add(
             project.messageBus.connect().apply {
@@ -158,8 +139,11 @@ class StockerToolWindow : ToolWindowFactory {
         messageBusConnections.clear()
     }
 
+    // Pause is driven by tool-window visibility only. IDE focus is deliberately NOT a
+    // factor: users park the dashboard on screen while working in another app, and a
+    // focus-based pause freezes the table exactly when they are glancing at it.
     private fun applyPauseState() {
-        if (toolWindowVisible && ideActive) {
+        if (toolWindowVisible) {
             myApplication.resume()
         } else {
             myApplication.pause()

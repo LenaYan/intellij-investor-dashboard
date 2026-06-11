@@ -221,6 +221,10 @@ class StockerApp {
 
             for ((market, codes) in visible) {
                 if (market !in intradayMarkets) continue
+                // Per-market gate: anyRelevantMarketOpen above may be true because of a
+                // different market (e.g. US evening session); minute data for a closed
+                // market is static, so skip the fetch for it.
+                if (StockerMarketSession.of(market)?.isOpen(now) != true) continue
                 if (!shouldContinueRefresh()) return@Runnable
 
                 val hits = HashMap<String, com.vermouthx.stocker.entities.StockerIntradayData>()
@@ -257,9 +261,15 @@ class StockerApp {
     }
 
     /**
-     * Returns true when at least one market the user has codes in is currently open.
-     * Codes are taken from the unified favourites list plus the finance/ watchlist
-     * additions — same union the consolidated task already builds.
+     * Returns true when at least one market the user has codes in is currently open,
+     * or when one of the index markets whose quotes every tab displays (CN/HK/US
+     * dropdown indices) is open. Codes are taken from the unified favourites list plus
+     * the finance/ watchlist additions — same union the consolidated task already builds.
+     *
+     * The Crypto index (BTC, 24/7) is deliberately excluded from the index check:
+     * counting it would keep this method permanently true and disable the off-hours
+     * throttle. Users who actually hold crypto codes still get full cadence via the
+     * codes loop.
      */
     private fun anyRelevantMarketOpen(now: Instant): Boolean {
         val watchlistByMarket = FinanceBridgeService.instance.watchlistCodesByMarket()
@@ -270,7 +280,12 @@ class StockerApp {
             val session = StockerMarketSession.of(market) ?: continue
             if (session.isOpen(now)) return true
         }
-        return false
+        val indexMarkets = listOf(
+            StockerMarketType.AShare,
+            StockerMarketType.HKStocks,
+            StockerMarketType.USStocks,
+        )
+        return indexMarkets.any { StockerMarketSession.of(it)?.isOpen(now) == true }
     }
 
     private fun fetchQuotesIfActive(
