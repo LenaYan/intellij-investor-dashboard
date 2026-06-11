@@ -53,7 +53,17 @@ class StockerApp {
     fun resume() { pauseState = State.RUNNING }
     fun isPaused(): Boolean = pauseState == State.PAUSED
 
+    /** True once schedule() ran on the current executors; reset by shutdown(). */
+    @Volatile
+    private var scheduled = false
+
+    @Synchronized
     fun schedule() {
+        if (scheduled && !scheduledExecutorService.isShutdown) {
+            // Already running — a second project joining the shared app must not
+            // stack a duplicate task onto the same executor.
+            return
+        }
         if (scheduledExecutorService.isShutdown) {
             scheduledExecutorService = Executors.newScheduledThreadPool(1)
             scheduleInitialDelay = 0
@@ -78,9 +88,11 @@ class StockerApp {
             intradayPeriodSeconds,
             TimeUnit.SECONDS,
         )
+        scheduled = true
     }
 
     fun shutdown() {
+        scheduled = false
         refreshActive = false
         intradayTickCounter = 0
         offHoursTickCounter = 0

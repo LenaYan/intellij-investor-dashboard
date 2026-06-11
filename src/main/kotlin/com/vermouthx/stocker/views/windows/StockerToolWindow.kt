@@ -8,7 +8,6 @@ import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.ui.content.ContentFactory
 import com.intellij.util.messages.MessageBusConnection
-import com.vermouthx.stocker.StockerApp
 import com.vermouthx.stocker.StockerAppManager
 import com.vermouthx.stocker.StockerBundle
 import com.vermouthx.stocker.finance.FinanceBridgeService
@@ -29,7 +28,7 @@ class StockerToolWindow : ToolWindowFactory {
     private val messageBus = ApplicationManager.getApplication().messageBus
 
     private lateinit var allView: StockerSimpleToolWindow
-    private lateinit var myApplication: StockerApp
+    private var myProject: Project? = null
     private var financePanel: FinanceToolWindowPanel? = null
     private var watchlistView: StockerSimpleToolWindow? = null
     private var watchlistRefreshListener: (() -> Unit)? = null
@@ -43,7 +42,6 @@ class StockerToolWindow : ToolWindowFactory {
         // surface those tabs offered. Per-market data is still fetched once (both tabs read
         // the same merged stream and filter); only the per-market UI is gone.
         allView = StockerSimpleToolWindow(readOnly = false)
-        myApplication = StockerApp()
     }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -104,7 +102,11 @@ class StockerToolWindow : ToolWindowFactory {
             cleanup()
         }
         
-        StockerAppManager.register(project, myApplication)
+        myProject = project
+        // Registers this project with the shared application-level fetcher and
+        // starts (or joins) the refresh loop — one set of HTTP requests total,
+        // however many projects are open.
+        StockerAppManager.register(project)
 
         toolWindowId = toolWindow.id
 
@@ -121,8 +123,6 @@ class StockerToolWindow : ToolWindowFactory {
                 })
             }
         )
-
-        myApplication.schedule()
     }
     
     private fun cleanup() {
@@ -145,12 +145,10 @@ class StockerToolWindow : ToolWindowFactory {
     // Pause is driven by tool-window visibility only. IDE focus is deliberately NOT a
     // factor: users park the dashboard on screen while working in another app, and a
     // focus-based pause freezes the table exactly when they are glancing at it.
+    // The shared app pauses only when *no* project's tool window is visible.
     private fun applyPauseState() {
-        if (toolWindowVisible) {
-            myApplication.resume()
-        } else {
-            myApplication.pause()
-        }
+        val project = myProject ?: return
+        StockerAppManager.setToolWindowVisible(project, toolWindowVisible)
     }
 
     private fun subscribeMessage() {
