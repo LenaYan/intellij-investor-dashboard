@@ -36,13 +36,22 @@ class StockerCloudUploadAction : AnAction() {
                 if (favResult.isSuccess && watchlistResult.isSuccess) {
                     Messages.showInfoMessage(
                         e.project,
-                        "Uploaded ${favResult.getOrDefault(0)} favorites and ${watchlistResult.getOrDefault(0)} watchlist entries.",
-                        "Cloud Sync"
+                        StockerBundle.message(
+                            "cloud.sync.upload.success",
+                            favResult.getOrDefault(0),
+                            watchlistResult.getOrDefault(0),
+                        ),
+                        StockerBundle.message("cloud.sync.title")
                     )
                 } else {
                     val error = favResult.exceptionOrNull()?.message
-                        ?: watchlistResult.exceptionOrNull()?.message ?: "Unknown error"
-                    Messages.showErrorDialog(e.project, "Sync failed: $error", "Cloud Sync Error")
+                        ?: watchlistResult.exceptionOrNull()?.message
+                        ?: StockerBundle.message("cloud.sync.unknown.error")
+                    Messages.showErrorDialog(
+                        e.project,
+                        StockerBundle.message("cloud.sync.upload.failed", error),
+                        StockerBundle.message("cloud.sync.error.title")
+                    )
                 }
             }
         }
@@ -96,14 +105,18 @@ class StockerCloudDownloadAction : AnAction() {
                 if (favResult.isSuccess) {
                     Messages.showInfoMessage(
                         e.project,
-                        "Downloaded ${favResult.getOrDefault(0)} favorites from cloud.",
-                        "Cloud Sync"
+                        StockerBundle.message("cloud.sync.download.success", favResult.getOrDefault(0)),
+                        StockerBundle.message("cloud.sync.title")
                     )
                 } else {
                     Messages.showErrorDialog(
                         e.project,
-                        "Download failed: ${favResult.exceptionOrNull()?.message}",
-                        "Cloud Sync Error"
+                        StockerBundle.message(
+                            "cloud.sync.download.failed",
+                            favResult.exceptionOrNull()?.message
+                                ?: StockerBundle.message("cloud.sync.unknown.error"),
+                        ),
+                        StockerBundle.message("cloud.sync.error.title")
                     )
                 }
             }

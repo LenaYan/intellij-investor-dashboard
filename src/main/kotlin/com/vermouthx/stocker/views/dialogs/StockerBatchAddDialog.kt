@@ -10,6 +10,7 @@ import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.RowLayout
 import com.intellij.ui.dsl.builder.panel
 import com.vermouthx.stocker.StockerAppManager
+import com.vermouthx.stocker.StockerBundle
 import com.vermouthx.stocker.entities.StockerSuggestion
 import com.vermouthx.stocker.enums.StockerMarketType
 import com.vermouthx.stocker.settings.StockerSetting
@@ -22,29 +23,37 @@ class StockerBatchAddDialog(val project: Project?) : DialogWrapper(project) {
     private val log = Logger.getInstance(StockerBatchAddDialog::class.java)
     private val setting = StockerSetting.instance
 
-    private val marketComboBox = ComboBox(arrayOf("CN (A-Share)", "HK", "US", "Crypto", "Futures (主连)"))
+    private val marketComboBox = ComboBox(
+        arrayOf(
+            StockerBundle.message("batch.dialog.market.cn"),
+            StockerBundle.message("batch.dialog.market.hk"),
+            StockerBundle.message("batch.dialog.market.us"),
+            StockerBundle.message("batch.dialog.market.crypto"),
+            StockerBundle.message("batch.dialog.market.futures"),
+        )
+    )
     private val codesTextArea = JTextArea(8, 40)
 
     init {
-        title = "Batch Add Stocks"
+        title = StockerBundle.message("batch.dialog.title")
         init()
     }
 
     override fun createCenterPanel(): DialogPanel {
         codesTextArea.lineWrap = true
         codesTextArea.wrapStyleWord = true
-        codesTextArea.toolTipText = "Enter stock codes separated by spaces or commas"
+        codesTextArea.toolTipText = StockerBundle.message("batch.dialog.codes.tooltip")
 
         val dialogPanel = panel {
             row {
-                label("Market:")
+                label(StockerBundle.message("batch.dialog.market"))
                 cell(marketComboBox)
             }.layout(RowLayout.LABEL_ALIGNED)
             row {
-                label("Codes:")
+                label(StockerBundle.message("batch.dialog.codes"))
                 scrollCell(codesTextArea)
                     .align(AlignX.FILL)
-                    .comment("Enter codes separated by spaces or commas.<br>Examples: 600519 000001 (CN) · LH0 SR0 JD0 (Futures)")
+                    .comment(StockerBundle.message("batch.dialog.codes.comment"))
             }.layout(RowLayout.LABEL_ALIGNED)
         }
         dialogPanel.preferredSize = Dimension(500, 300)
@@ -63,7 +72,11 @@ class StockerBatchAddDialog(val project: Project?) : DialogWrapper(project) {
 
         val input = codesTextArea.text.trim()
         if (input.isEmpty()) {
-            Messages.showWarningDialog(project, "Please enter at least one stock code.", "No Input")
+            Messages.showWarningDialog(
+                project,
+                StockerBundle.message("batch.dialog.no.input.empty"),
+                StockerBundle.message("batch.dialog.no.input.title"),
+            )
             return
         }
 
@@ -74,7 +87,11 @@ class StockerBatchAddDialog(val project: Project?) : DialogWrapper(project) {
             .distinct()
 
         if (codes.isEmpty()) {
-            Messages.showWarningDialog(project, "No valid stock codes found.", "No Input")
+            Messages.showWarningDialog(
+                project,
+                StockerBundle.message("batch.dialog.no.input.invalid"),
+                StockerBundle.message("batch.dialog.no.input.title"),
+            )
             return
         }
 
@@ -104,19 +121,19 @@ class StockerBatchAddDialog(val project: Project?) : DialogWrapper(project) {
         // Show result summary
         val sb = StringBuilder()
         if (addedCodes.isNotEmpty()) {
-            sb.append("Successfully added ${addedCodes.size} code(s): ${addedCodes.joinToString(", ")}\n")
+            sb.append(StockerBundle.message("batch.dialog.result.added", addedCodes.size, addedCodes.joinToString(", "))).append('\n')
         }
         if (duplicateCodes.isNotEmpty()) {
-            sb.append("Skipped ${duplicateCodes.size} duplicate(s): ${duplicateCodes.joinToString(", ")}\n")
+            sb.append(StockerBundle.message("batch.dialog.result.skipped", duplicateCodes.size, duplicateCodes.joinToString(", "))).append('\n')
         }
         if (failedCodes.isNotEmpty()) {
-            sb.append("Failed to add ${failedCodes.size} code(s): ${failedCodes.joinToString(", ")}\n")
+            sb.append(StockerBundle.message("batch.dialog.result.failed", failedCodes.size, failedCodes.joinToString(", "))).append('\n')
         }
 
         if (failedCodes.isNotEmpty()) {
-            Messages.showWarningDialog(project, sb.toString().trim(), "Batch Add Result")
+            Messages.showWarningDialog(project, sb.toString().trim(), StockerBundle.message("batch.dialog.result.title"))
         } else if (addedCodes.isNotEmpty()) {
-            Messages.showInfoMessage(project, sb.toString().trim(), "Batch Add Result")
+            Messages.showInfoMessage(project, sb.toString().trim(), StockerBundle.message("batch.dialog.result.title"))
         }
 
         super.doOKAction()

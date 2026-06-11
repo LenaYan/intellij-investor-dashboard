@@ -11,6 +11,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.panel
 import com.vermouthx.stocker.StockerAppManager
+import com.vermouthx.stocker.StockerBundle
 import com.vermouthx.stocker.entities.StockerSuggestion
 import com.vermouthx.stocker.enums.StockerMarketType
 import com.vermouthx.stocker.enums.StockerStockOperation
@@ -45,14 +46,17 @@ class StockerSuggestionDialog(val project: Project?) : DialogWrapper(project) {
     private var isLoading: Boolean = false
     private var searchMode: SearchMode = SearchMode.STOCKS
 
-    private enum class SearchMode(val displayName: String) {
-        STOCKS("Stocks (CN/HK/US)"),
-        CRYPTO("Crypto"),
-        FUTURES("Futures (主连)")
+    private enum class SearchMode(private val key: String) {
+        STOCKS("suggestion.mode.stocks"),
+        CRYPTO("suggestion.mode.crypto"),
+        FUTURES("suggestion.mode.futures");
+
+        val displayName: String
+            get() = StockerBundle.message(key)
     }
 
     init {
-        title = "Search Assets"
+        title = StockerBundle.message("suggestion.dialog.title")
         init()
     }
 
@@ -110,7 +114,7 @@ class StockerSuggestionDialog(val project: Project?) : DialogWrapper(project) {
         
         // Create mode selector panel
         val modePanel = JPanel(FlowLayout(FlowLayout.LEFT))
-        modePanel.add(JLabel("Search for:"))
+        modePanel.add(JLabel(StockerBundle.message("suggestion.dialog.search.for")))
         val modeComboBox = ComboBox(arrayOf(
             SearchMode.STOCKS.displayName,
             SearchMode.CRYPTO.displayName,
@@ -176,14 +180,14 @@ class StockerSuggestionDialog(val project: Project?) : DialogWrapper(project) {
         val contentPanel = if (isLoading) {
             panel {
                 row {
-                    label("Searching...").align(AlignX.CENTER)
+                    label(StockerBundle.message("suggestion.dialog.searching")).align(AlignX.CENTER)
                 }
             }.withBorder(BorderFactory.createEmptyBorder(16, 8, 8, 8))
         } else if (suggestions.isEmpty()) {
             val message = when (searchMode) {
-                SearchMode.STOCKS -> "Type to search for stocks (CN/HK/US)..."
-                SearchMode.CRYPTO -> "Type to search for crypto..."
-                SearchMode.FUTURES -> "No futures contracts matched. Try LH0, SR0, JD0..."
+                SearchMode.STOCKS -> StockerBundle.message("suggestion.dialog.empty.stocks")
+                SearchMode.CRYPTO -> StockerBundle.message("suggestion.dialog.empty.crypto")
+                SearchMode.FUTURES -> StockerBundle.message("suggestion.dialog.empty.futures")
             }
             panel {
                 row {
@@ -194,17 +198,17 @@ class StockerSuggestionDialog(val project: Project?) : DialogWrapper(project) {
             panel {
                 // Add header row
                 row {
-                    label("Code").bold()
+                    label(StockerBundle.message("suggestion.dialog.header.code")).bold()
                         .applyToComponent {
                             minimumSize = java.awt.Dimension(100, 0)
                             preferredSize = java.awt.Dimension(100, preferredSize.height)
                         }
-                    label("Name").bold()
+                    label(StockerBundle.message("suggestion.dialog.header.name")).bold()
                         .applyToComponent {
                             minimumSize = java.awt.Dimension(300, 0)
                             preferredSize = java.awt.Dimension(300, preferredSize.height)
                         }
-                    label("Action").bold()
+                    label(StockerBundle.message("suggestion.dialog.header.action")).bold()
                         .applyToComponent {
                             minimumSize = java.awt.Dimension(100, 0)
                             preferredSize = java.awt.Dimension(100, preferredSize.height)
