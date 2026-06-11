@@ -129,66 +129,13 @@ object StockerQuoteHttpUtil {
                     val responseText = EntityUtils.toString(response.entity, "UTF-8")
                     // Use uppercase rawCode as key to match table display (parser strips prefix)
                     val mapKey = rawCode.uppercase()
-                    parseIntradayResponse(mapKey, responseText)?.let { result[mapKey] = it }
+                    StockerIntradayParser.parse(mapKey, responseText)?.let { result[mapKey] = it }
                 }
             } catch (e: Exception) {
                 log.warn("Failed to fetch intraday data for $code: ${e.message}")
             }
         }
         return result
-    }
-
-    private fun parseIntradayResponse(code: String, responseText: String): StockerIntradayData? {
-        // Response format: min_data_CODE={"code":0,"msg":"","data":{"shCODE":{"data":{"data":["HHMM price volume amount",...]}}}}
-        val jsonStart = responseText.indexOf('{')
-        if (jsonStart < 0) return null
-
-        val json = responseText.substring(jsonStart)
-        // Extract "data":["...","..."] array - simple parsing without JSON library
-        val dataArrayStart = json.indexOf("\"data\":[\"")
-        if (dataArrayStart < 0) return null
-
-        val arrayStart = json.indexOf('[', dataArrayStart)
-        val arrayEnd = json.indexOf(']', arrayStart)
-        if (arrayStart < 0 || arrayEnd < 0) return null
-
-        val arrayContent = json.substring(arrayStart + 1, arrayEnd)
-        val prices = mutableListOf<Double>()
-        // Each entry: "HHMM price volume amount"
-        val entries = arrayContent.split("\",\"")
-        for (entry in entries) {
-            val cleaned = entry.trim('"')
-            val parts = cleaned.split(" ")
-            if (parts.size >= 2) {
-                parts[1].toDoubleOrNull()?.let { prices.add(it) }
-            }
-        }
-
-        if (prices.isEmpty()) return null
-
-        // Extract yesterday's close from qt field: "qt":{"v_ff_shCODE":[],"shCODE":["1","name","code","...","close",...]}
-        var close = prices.first()
-        val qtStart = json.indexOf("\"qt\":")
-        if (qtStart >= 0) {
-            // Find the stock's qt array by looking for the code in a key followed by ":["
-            // The key format varies: "sh600522", "hk00700", "usAAPL", etc.
-            val qtKeyPattern = "$code\":["
-            val stockQtPos = json.indexOf(qtKeyPattern, qtStart)
-            if (stockQtPos >= 0) {
-                val qtArrayStart = stockQtPos + qtKeyPattern.length - 1  // position of '['
-                val qtArrayEnd = json.indexOf("]", qtArrayStart)
-                if (qtArrayEnd >= 0) {
-                    val qtContent = json.substring(qtArrayStart + 1, qtArrayEnd)
-                    val qtParts = qtContent.split(",")
-                    // Index 4 is yesterday's close in qt array
-                    if (qtParts.size > 4) {
-                        qtParts[4].trim('"').toDoubleOrNull()?.let { close = it }
-                    }
-                }
-            }
-        }
-
-        return StockerIntradayData(code, prices, close)
     }
 
     fun validateCode(
