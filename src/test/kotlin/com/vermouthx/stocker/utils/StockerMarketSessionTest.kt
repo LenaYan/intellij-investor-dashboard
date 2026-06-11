@@ -57,4 +57,23 @@ class StockerMarketSessionTest {
         val session = StockerMarketSession.of(StockerMarketType.Crypto)!!
         assertTrue(session.isOpen(at(shanghai, "2026-06-13T03:00:00")), "even on weekends at night")
     }
+
+    @Test
+    fun `a-share covers the call auction from 9_15`() {
+        val session = StockerMarketSession.of(StockerMarketType.AShare)!!
+        assertTrue(session.isOpen(at(shanghai, "2026-06-10T09:20:00")))
+        assertFalse(session.isOpen(at(shanghai, "2026-06-10T09:10:00")))
+    }
+
+    @Test
+    fun `mainland markets close on statutory holidays`() {
+        val aShare = StockerMarketSession.of(StockerMarketType.AShare)!!
+        val futures = StockerMarketSession.of(StockerMarketType.Futures)!!
+        // National Day (Thursday) — weekday but closed.
+        assertFalse(aShare.isOpen(at(shanghai, "2026-10-01T10:00:00")))
+        assertFalse(futures.isOpen(at(shanghai, "2026-10-01T10:00:00")))
+        // US market is unaffected by the CN holiday table.
+        val us = StockerMarketSession.of(StockerMarketType.USStocks)!!
+        assertTrue(us.isOpen(at(newYork, "2026-10-01T10:00:00")))
+    }
 }
