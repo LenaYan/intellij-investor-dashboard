@@ -15,6 +15,17 @@ plugins {
 group = properties("pluginGroup")
 version = properties("pluginVersion")
 
+// since-build 241 IDEs run on JBR 17; compiling to 21 produces classes those
+// IDEs (and the platform test runtime) cannot load.
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+tasks.withType<JavaCompile> {
+    options.release = 17
+}
+
 repositories {
     mavenCentral()
     intellijPlatform {
@@ -28,10 +39,16 @@ dependencies {
     // Gson is also bundled in the IntelliJ Platform, but declaring it explicitly
     // makes our finance/ JSON parsing build-stable across platform versions.
     implementation("com.google.code.gson:gson:2.10.1")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     intellijPlatform {
         create(properties("platformType"), properties("platformVersion"))
         pluginVerifier()
     }
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }
 
 changelog {

@@ -12,13 +12,14 @@ The default verification before claiming a change works:
 
 ```bash
 ./gradlew compileKotlin compileJava       # fast compile check (Java task remains for the `java` plugin)
+./gradlew test                            # JUnit 5 unit tests under src/test/kotlin (parser, sessions, cache, code prefixes)
 ./gradlew buildPlugin                     # produce distributable .zip in build/distributions
 ./gradlew runIde                          # launch sandbox IDE with the plugin installed
 ./gradlew verifyPlugin                    # IntelliJ plugin compatibility verifier
 ```
 
 Notes specific to this build:
-- There is **no test source set** in this repo. Do not invent `./gradlew test`; it will pass trivially.
+- Tests target pure logic only (no IDE fixture). Bytecode targets Java 17 (`-release 17` / `jvmTarget 17`) because since-build 241 IDEs and the platform test runtime run on JBR 17 — don't raise it without bumping since-build.
 - `buildSearchableOptions = false` is set in `build.gradle.kts`, so don't be surprised that searchable index isn't generated.
 - `gradle.properties` pins `platformType=IC` / `platformVersion=2024.1`; bumping these affects the verifier matrix configured in `build.gradle.kts`.
 
