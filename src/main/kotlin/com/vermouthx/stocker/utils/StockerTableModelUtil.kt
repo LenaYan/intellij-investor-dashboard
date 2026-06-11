@@ -17,8 +17,9 @@ object StockerTableModelUtil {
     }
 
     /**
-     * Update a cell only when the new value differs from the existing one, firing
-     * `fireTableCellUpdated` exactly when a change happened. No-op for unknown columns.
+     * Update a cell only when the new value differs from the existing one. The single
+     * cell-updated event comes from DefaultTableModel.setValueAt itself — don't fire a
+     * second one here. No-op for unknown columns.
      */
     @JvmStatic
     fun setIfChanged(model: DefaultTableModel, row: Int, col: Int, newValue: Any?) {
@@ -26,8 +27,22 @@ object StockerTableModelUtil {
         val existing = model.getValueAt(row, col)
         if (existing != newValue) {
             model.setValueAt(newValue, row, col)
-            model.fireTableCellUpdated(row, col)
         }
+    }
+
+    /**
+     * One-pass code→row index for batch updates: looking each quote up via [existAt]
+     * made a refresh tick O(rows²). Same symbol-column fallback as [existAt].
+     */
+    @JvmStatic
+    fun rowIndexByCode(tableModel: DefaultTableModel): MutableMap<String, Int> {
+        val codeCol = tableModel.findColumn(StockerTableColumn.SYMBOL.name).let { if (it < 0) 0 else it }
+        val index = HashMap<String, Int>(tableModel.rowCount * 2)
+        for (i in 0 until tableModel.rowCount) {
+            val cell = tableModel.getValueAt(i, codeCol) ?: continue
+            index[cell.toString()] = i
+        }
+        return index
     }
 
     /** Resolve a model column index by [StockerTableColumn] enum, returning -1 if absent. */

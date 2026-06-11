@@ -24,6 +24,7 @@ import com.vermouthx.stocker.enums.StockerSortState
 import com.vermouthx.stocker.enums.StockerTableColumn
 import com.vermouthx.stocker.settings.StockerSetting
 import com.vermouthx.stocker.utils.StockerNumberFormat
+import com.vermouthx.stocker.utils.StockerTableModelUtil
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Component
@@ -122,8 +123,9 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
                 for (row in 0 until tbModel.rowCount) {
                     val codeObj = tbModel.getValueAt(row, 0) ?: continue
                     val data = intradayMap[codeObj.toString()] ?: continue
-                    tbModel.setValueAt(data, row, sparklineColIndex)
-                    tbModel.fireTableCellUpdated(row, sparklineColIndex)
+                    // setValueAt fires the cell-updated event itself; setIfChanged also
+                    // skips the repaint entirely when the intraday payload is identical.
+                    StockerTableModelUtil.setIfChanged(tbModel, row, sparklineColIndex, data)
                 }
             }
         }
@@ -147,8 +149,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
         val last  = (if (lastRaw  < 0) rowCount - 1 else lastRaw) + 5
         val clampedFirst = first.coerceAtLeast(0)
         val clampedLast  = last.coerceAtMost(rowCount - 1)
-        val symbolCol = com.vermouthx.stocker.utils.StockerTableModelUtil
-            .colOf(tbModel, com.vermouthx.stocker.enums.StockerTableColumn.SYMBOL)
+        val symbolCol = StockerTableModelUtil.colOf(tbModel, StockerTableColumn.SYMBOL)
         if (symbolCol < 0) {
             visibleSnapshot = VisibleSnapshot(emptyList())
             return
@@ -319,20 +320,20 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
         val holdingsColumnIndex = tbModel.findColumn(HOLDINGS_COL)
         val netProfitColumnIndex = tbModel.findColumn(NET_PROFIT_COL)
 
+        // setIfChanged fires one cell event per changed cell; no fireTableDataChanged on
+        // top — a full-table event would also drop the user's row selection.
         for (row in 0 until tbModel.rowCount) {
             val codeValue = tbModel.getValueAt(row, codeColumnIndex) ?: continue
             val code = codeValue.toString()
 
             val costPrice = setting.getCostPrice(code)
             val holdings = setting.getHoldings(code)
-            tbModel.setValueAt(StockerNumberFormat.formatPrice(costPrice), row, costPriceColumnIndex)
-            tbModel.setValueAt(StockerNumberFormat.formatHoldings(holdings), row, holdingsColumnIndex)
+            StockerTableModelUtil.setIfChanged(tbModel, row, costPriceColumnIndex, StockerNumberFormat.formatPrice(costPrice))
+            StockerTableModelUtil.setIfChanged(tbModel, row, holdingsColumnIndex, StockerNumberFormat.formatHoldings(holdings))
 
             val currentPrice = StockerCellValues.parseDouble(tbModel.getValueAt(row, currentColumnIndex))
-            tbModel.setValueAt(StockerNumberFormat.formatNetProfit(currentPrice, costPrice, holdings), row, netProfitColumnIndex)
+            StockerTableModelUtil.setIfChanged(tbModel, row, netProfitColumnIndex, StockerNumberFormat.formatNetProfit(currentPrice, costPrice, holdings))
         }
-
-        tbModel.fireTableDataChanged()
     }
 
     private fun applyColumnRenderers() {
@@ -454,20 +455,20 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
             }
         }
 
-        /** Snapshot of codes currently visible across all active table views, grouped by market. */
+        /**
+         * Snapshot of codes currently visible across all active table views. Market
+         * resolution is the caller's job (StockerApp) — favorites alone can't classify
+         * watchlist-only rows, and the view layer must not depend on finance/.
+         */
         @JvmStatic
-        fun visibleCodesByMarket(): Map<com.vermouthx.stocker.enums.StockerMarketType, Set<String>> {
-            val setting = com.vermouthx.stocker.settings.StockerSetting.instance
-            val grouped = HashMap<com.vermouthx.stocker.enums.StockerMarketType, MutableSet<String>>()
+        fun visibleCodes(): Set<String> {
+            val codes = HashSet<String>()
             synchronized(tableViews) {
                 for (view in tableViews) {
-                    for (code in view.visibleSnapshot.codes) {
-                        val m = setting.marketOf(code) ?: continue
-                        grouped.getOrPut(m) { HashSet() }.add(code)
-                    }
+                    codes.addAll(view.visibleSnapshot.codes)
                 }
             }
-            return grouped
+            return codes
         }
     }
 }

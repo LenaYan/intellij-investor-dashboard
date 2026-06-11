@@ -46,36 +46,38 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
 
         // Hold the lock for the whole batch — previously each quote re-acquired it.
         synchronized(model) {
+            // One-pass index instead of a per-quote linear scan (O(rows²) per tick).
+            val rowByCode = StockerTableModelUtil.rowIndexByCode(model)
             for (quote in quotes) {
                 val code = quote.code
                 val displayName = prefixNameWithEvents(setting.getDisplayName(code, quote.name), code)
                 val costPrice = setting.getCostPrice(code)
                 val holdings = setting.getHoldings(code)
 
-                val rowIndex = StockerTableModelUtil.existAt(model, code)
+                val rowIndex = rowByCode[code] ?: -1
                 if (rowIndex != -1) {
-                    try {
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, nameCol, displayName)
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, currentCol, quote.current)
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, openingCol, quote.opening)
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, closeCol, quote.close)
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, lowCol, quote.low)
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, highCol, quote.high)
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, changeCol, quote.change)
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, percentCol, "${quote.percentage}%")
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, costPriceCol, StockerNumberFormat.formatPrice(costPrice))
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, holdingsCol, StockerNumberFormat.formatHoldings(holdings))
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, netProfitCol,
-                            StockerNumberFormat.formatNetProfit(quote.current, costPrice, holdings))
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, healthCol, formatHealthBadge(code))
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, distanceCol,
-                            FinanceDistanceAnnotator.encode(FinanceDistanceAnnotator.annotate(code, quote.current)))
-                        StockerTableModelUtil.setIfChanged(model, rowIndex, updateTimeCol, formatUpdateTime(quote.updateAt))
-                    } finally {
-                        model.fireTableRowsUpdated(rowIndex, rowIndex)
-                    }
+                    // setIfChanged emits one cell-updated event per actually changed cell
+                    // (via DefaultTableModel.setValueAt); no row-level fire on top, so an
+                    // unchanged row costs zero repaints per tick.
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, nameCol, displayName)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, currentCol, quote.current)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, openingCol, quote.opening)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, closeCol, quote.close)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, lowCol, quote.low)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, highCol, quote.high)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, changeCol, quote.change)
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, percentCol, "${quote.percentage}%")
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, costPriceCol, StockerNumberFormat.formatPrice(costPrice))
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, holdingsCol, StockerNumberFormat.formatHoldings(holdings))
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, netProfitCol,
+                        StockerNumberFormat.formatNetProfit(quote.current, costPrice, holdings))
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, healthCol, formatHealthBadge(code))
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, distanceCol,
+                        FinanceDistanceAnnotator.encode(FinanceDistanceAnnotator.annotate(code, quote.current)))
+                    StockerTableModelUtil.setIfChanged(model, rowIndex, updateTimeCol, formatUpdateTime(quote.updateAt))
                 } else if (quotes.size <= size) {
                     model.addRow(buildRow(quote, displayName, costPrice, holdings, model.columnCount))
+                    rowByCode[code] = model.rowCount - 1
                     myTableView.clearSortState()
                 }
             }
@@ -96,10 +98,12 @@ class StockerQuoteUpdateListener(private val myTableView: StockerTableView) : St
          */
         private fun prefixNameWithEvents(baseName: String, code: String): String {
             return try {
-                val bridge = FinanceBridgeService.instance
+                // One snapshot read for both lookups — two reads could straddle a
+                // file-watcher reload and mix events/grade from different states.
+                val snapshot = FinanceBridgeService.instance.snapshot()
                 val key = FinanceSymbol.normalize(code)
-                val events = bridge.snapshot().eventsBySymbol[key] ?: emptySet()
-                val gradeGlyph = bridge.snapshot().entryTimingBySymbol[key]?.gradeGlyph
+                val events = snapshot.eventsBySymbol[key] ?: emptySet()
+                val gradeGlyph = snapshot.entryTimingBySymbol[key]?.gradeGlyph
 
                 val sb = StringBuilder()
                 if (gradeGlyph != null) sb.append(gradeGlyph).append(' ')
