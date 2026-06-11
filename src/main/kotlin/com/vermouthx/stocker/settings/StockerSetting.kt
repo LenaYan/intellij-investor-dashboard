@@ -1,5 +1,8 @@
 package com.vermouthx.stocker.settings
 
+import com.intellij.credentialStore.CredentialAttributes
+import com.intellij.credentialStore.generateServiceName
+import com.intellij.ide.passwordSafe.PasswordSafe
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.State
@@ -270,11 +273,34 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
             myState.cloudSyncBaseUrl = value
         }
 
+    /**
+     * Stored in the OS keychain via PasswordSafe, not in stocker-config.xml.
+     * A key persisted as plaintext by older versions is migrated on first read
+     * and blanked from the XML state.
+     */
     var cloudSyncApiKey: String
-        get() = myState.cloudSyncApiKey
-        set(value) {
-            myState.cloudSyncApiKey = value
+        get() {
+            migrateLegacyApiKeyIfNeeded()
+            return PasswordSafe.instance.getPassword(cloudSyncCredentialAttributes()) ?: ""
         }
+        set(value) {
+            PasswordSafe.instance.setPassword(cloudSyncCredentialAttributes(), value.ifBlank { null })
+            myState.cloudSyncApiKey = ""
+        }
+
+    private fun migrateLegacyApiKeyIfNeeded() {
+        val legacy = myState.cloudSyncApiKey
+        if (legacy.isBlank()) return
+        if (PasswordSafe.instance.getPassword(cloudSyncCredentialAttributes()).isNullOrBlank()) {
+            PasswordSafe.instance.setPassword(cloudSyncCredentialAttributes(), legacy)
+            log.info("Migrated cloud sync API key from plaintext settings to PasswordSafe")
+        }
+        myState.cloudSyncApiKey = ""
+    }
+
+    private fun cloudSyncCredentialAttributes() = CredentialAttributes(
+        generateServiceName("Stocker", "cloudSyncApiKey")
+    )
 
     var cloudSyncAutoEnabled: Boolean
         get() = myState.cloudSyncAutoEnabled
