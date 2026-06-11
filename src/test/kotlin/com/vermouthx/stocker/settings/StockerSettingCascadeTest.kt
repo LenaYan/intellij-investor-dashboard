@@ -33,6 +33,23 @@ class StockerSettingCascadeTest {
     }
 
     @Test
+    fun `reassigning favoritesList clears attachments of codes that vanished`() {
+        // The management dialog commits deletions by rebuilding favoritesList wholesale,
+        // bypassing removeFavorite — the cascade must cover this path too.
+        val setting = newSetting()
+        setting.addFavorite(StockerMarketType.AShare, "SH600519")
+        setting.addFavorite(StockerMarketType.HKStocks, "00700")
+        setting.setCostPrice("SH600519", 1500.0)
+        setting.setCostPrice("00700", 410.0)
+
+        setting.favoritesList =
+            mutableListOf(setting.favoriteKey(StockerMarketType.HKStocks, "00700"))
+
+        assertNull(setting.getCostPrice("SH600519"))
+        assertEquals(410.0, setting.getCostPrice("00700"))
+    }
+
+    @Test
     fun `attachments survive while the code remains in another market`() {
         val setting = newSetting()
         val code = "00700"

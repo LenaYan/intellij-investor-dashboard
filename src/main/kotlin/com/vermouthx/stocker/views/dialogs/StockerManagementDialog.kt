@@ -12,6 +12,7 @@ import com.intellij.ui.dsl.builder.AlignY
 import com.intellij.ui.dsl.builder.RowLayout
 import com.intellij.ui.dsl.builder.panel
 import com.vermouthx.stocker.StockerAppManager
+import com.vermouthx.stocker.StockerBundle
 import com.vermouthx.stocker.entities.StockerQuote
 import com.vermouthx.stocker.enums.StockerMarketType
 import com.vermouthx.stocker.settings.StockerSetting
@@ -33,7 +34,7 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
     private val currentSymbols: DefaultListModel<StockerQuote> = DefaultListModel()
 
     init {
-        title = "Manage Favorite Stocks"
+        title = StockerBundle.message("management.dialog.title")
         init()
     }
 
@@ -87,7 +88,7 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
         pane.add(
             panel {
                 row {
-                    label("Loading...").align(AlignX.CENTER)
+                    label(StockerBundle.message("management.loading")).align(AlignX.CENTER)
                 }
             }, BorderLayout.CENTER
         )
@@ -187,27 +188,27 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
         // Create header panel
         val headerPanel = panel {
             row {
-                label("Code").bold()
+                label(StockerBundle.message("management.header.code")).bold()
                     .applyToComponent {
                         minimumSize = java.awt.Dimension(80, 0)
                         preferredSize = java.awt.Dimension(80, preferredSize.height)
                     }
-                label("Original Name").bold()
+                label(StockerBundle.message("management.header.original.name")).bold()
                     .applyToComponent {
                         minimumSize = java.awt.Dimension(150, 0)
                         preferredSize = java.awt.Dimension(150, preferredSize.height)
                     }
-                label("Custom Name").bold()
+                label(StockerBundle.message("management.header.custom.name")).bold()
                     .applyToComponent {
                         minimumSize = java.awt.Dimension(120, 0)
                         preferredSize = java.awt.Dimension(120, preferredSize.height)
                     }
-                label("Cost").bold()
+                label(StockerBundle.message("management.header.cost")).bold()
                     .applyToComponent {
                         minimumSize = java.awt.Dimension(80, 0)
                         preferredSize = java.awt.Dimension(80, preferredSize.height)
                     }
-                label("Holdings").bold()
+                label(StockerBundle.message("management.header.holdings")).bold()
                     .applyToComponent {
                         minimumSize = java.awt.Dimension(80, 0)
                         preferredSize = java.awt.Dimension(80, preferredSize.height)
@@ -250,17 +251,17 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
 
                     val editPanel = panel {
                         row {
-                            label("Custom name:")
+                            label(StockerBundle.message("management.edit.custom.name"))
                                 .widthGroup("editLabels")
                             cell(nameField)
                         }.layout(RowLayout.LABEL_ALIGNED)
                         row {
-                            label("Cost price:")
+                            label(StockerBundle.message("management.edit.cost.price"))
                                 .widthGroup("editLabels")
                             cell(costPriceField)
                         }.layout(RowLayout.LABEL_ALIGNED)
                         row {
-                            label("Holdings:")
+                            label(StockerBundle.message("management.edit.holdings"))
                                 .widthGroup("editLabels")
                             cell(holdingsField)
                         }.layout(RowLayout.LABEL_ALIGNED)
@@ -269,7 +270,7 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
                     val result = JOptionPane.showConfirmDialog(
                         pane,
                         editPanel,
-                        "Edit ${selectedQuote.code}",
+                        StockerBundle.message("management.edit.title", selectedQuote.code),
                         JOptionPane.OK_CANCEL_OPTION,
                         JOptionPane.PLAIN_MESSAGE
                     )
@@ -321,8 +322,8 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
         // Bottom action panel with "Move to Top", "Move to Bottom", and "Delete All" buttons
         val actionPanel = JPanel(FlowLayout(FlowLayout.LEFT))
         
-        val moveToTopButton = JButton("Move to Top")
-        moveToTopButton.toolTipText = "Move selected item(s) to the top of the list"
+        val moveToTopButton = JButton(StockerBundle.message("management.move.top"))
+        moveToTopButton.toolTipText = StockerBundle.message("management.move.top.tooltip")
         moveToTopButton.addActionListener {
             val selectedIndices = list.selectedIndices
             if (selectedIndices.isEmpty()) return@addActionListener
@@ -342,8 +343,8 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
         }
         actionPanel.add(moveToTopButton)
         
-        val moveToBottomButton = JButton("Move to Bottom")
-        moveToBottomButton.toolTipText = "Move selected item(s) to the bottom of the list"
+        val moveToBottomButton = JButton(StockerBundle.message("management.move.bottom"))
+        moveToBottomButton.toolTipText = StockerBundle.message("management.move.bottom.tooltip")
         moveToBottomButton.addActionListener {
             val selectedIndices = list.selectedIndices
             if (selectedIndices.isEmpty()) return@addActionListener
@@ -364,14 +365,14 @@ class StockerManagementDialog(val project: Project?) : DialogWrapper(project) {
         }
         actionPanel.add(moveToBottomButton)
         
-        val deleteAllButton = JButton("Delete All")
-        deleteAllButton.toolTipText = "Remove all stocks in this tab"
+        val deleteAllButton = JButton(StockerBundle.message("management.delete.all"))
+        deleteAllButton.toolTipText = StockerBundle.message("management.delete.all.tooltip")
         deleteAllButton.addActionListener {
             if (listModel.isEmpty) return@addActionListener
             val result = Messages.showYesNoDialog(
                 pane,
-                "Remove all ${listModel.size()} item(s) from this tab?",
-                "Confirm Delete All",
+                StockerBundle.message("management.delete.all.confirm", listModel.size()),
+                StockerBundle.message("management.delete.all.confirm.title"),
                 Messages.getWarningIcon()
             )
             if (result == Messages.YES) {

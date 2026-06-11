@@ -98,7 +98,14 @@ class StockerSetting : PersistentStateComponent<StockerSettingState> {
     var favoritesList: MutableList<String>
         get() = myState.favoritesList
         set(value) {
+            // The management dialog commits deletions by rebuilding this list wholesale
+            // (it never calls removeFavorite), so the orphan cascade must run here too.
+            val oldCodes = myState.favoritesList.mapNotNull { parseFavoriteKey(it)?.second }
             myState.favoritesList = value
+            val newCodes = value.mapNotNull { parseFavoriteKey(it)?.second }.toSet()
+            for (code in oldCodes) {
+                if (code !in newCodes) clearCodeAttachments(code)
+            }
         }
 
     /** Build the persisted key for a favorite entry. */
