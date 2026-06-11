@@ -19,6 +19,9 @@ import com.vermouthx.stocker.listeners.StockerQuoteDeleteNotifier.Companion.STOC
 import com.vermouthx.stocker.listeners.StockerQuoteReloadListener
 import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.Companion.STOCK_ALL_QUOTE_RELOAD_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.Companion.STOCK_ALL_QUOTE_UPDATE_TOPIC
+import com.vermouthx.stocker.listeners.StockerRefreshStatus
+import com.vermouthx.stocker.listeners.StockerRefreshStatusNotifier
+import com.vermouthx.stocker.listeners.StockerRefreshStatusNotifier.Companion.REFRESH_STATUS_TOPIC
 import com.vermouthx.stocker.listeners.WatchlistQuoteUpdateListener
 
 class StockerToolWindow : ToolWindowFactory {
@@ -171,5 +174,15 @@ class StockerToolWindow : ToolWindowFactory {
                 subscribe(STOCK_ALL_QUOTE_RELOAD_TOPIC, StockerQuoteReloadListener(v.tableView))
             })
         }
+
+        // Refresh-state footer on every tab — shows why the table is (or isn't) moving.
+        messageBusConnections.add(messageBus.connect().apply {
+            subscribe(REFRESH_STATUS_TOPIC, object : StockerRefreshStatusNotifier {
+                override fun statusChanged(status: StockerRefreshStatus) {
+                    allView.updateRefreshStatus(status)
+                    watchlistView?.updateRefreshStatus(status)
+                }
+            })
+        })
     }
 }

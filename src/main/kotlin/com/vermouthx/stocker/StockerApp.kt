@@ -9,6 +9,9 @@ import com.vermouthx.stocker.enums.StockerQuoteProvider
 import com.vermouthx.stocker.finance.FinanceBridgeService
 import com.vermouthx.stocker.listeners.StockerQuoteReloadNotifier.Companion.STOCK_ALL_QUOTE_RELOAD_TOPIC
 import com.vermouthx.stocker.listeners.StockerQuoteUpdateNotifier.Companion.STOCK_ALL_QUOTE_UPDATE_TOPIC
+import com.vermouthx.stocker.listeners.StockerRefreshState
+import com.vermouthx.stocker.listeners.StockerRefreshStatus
+import com.vermouthx.stocker.listeners.StockerRefreshStatusNotifier.Companion.REFRESH_STATUS_TOPIC
 import com.vermouthx.stocker.settings.StockerSetting
 import com.vermouthx.stocker.utils.StockerIntradayCache
 import com.vermouthx.stocker.utils.StockerMarketSession
@@ -45,6 +48,7 @@ class StockerApp {
     @Volatile private var offHoursTickCounter: Long = 0
     @Volatile private var consecutiveFailures: Int = 0
     @Volatile private var skipUntil: Instant = Instant.MIN
+    @Volatile private var lastSuccessAt: Instant? = null
 
     fun pause() { pauseState = State.PAUSED }
     fun resume() { pauseState = State.RUNNING }
@@ -121,6 +125,7 @@ class StockerApp {
 
     private fun consolidatedTick() {
             if (pauseState == State.PAUSED) {
+                publishStatus(StockerRefreshState.PAUSED)
                 return
             }
             if (!shouldContinueRefresh()) {
@@ -128,11 +133,13 @@ class StockerApp {
             }
 
             val now = Instant.now()
-            if (!anyRelevantMarketOpen(now)) {
+            val offHours = !anyRelevantMarketOpen(now)
+            if (offHours) {
                 val ticksPerMinute = (60L / setting.refreshInterval.coerceAtLeast(1L)).coerceAtLeast(1L)
                 val skipThisTick = offHoursTickCounter % ticksPerMinute != 0L
                 offHoursTickCounter++
                 if (skipThisTick) {
+                    publishStatus(StockerRefreshState.OFF_HOURS)
                     return
                 }
             } else {
@@ -140,6 +147,7 @@ class StockerApp {
             }
 
             if (now.isBefore(skipUntil)) {
+                publishStatus(StockerRefreshState.BACKOFF)
                 return
             }
 
@@ -203,12 +211,28 @@ class StockerApp {
                     val log = Logger.getInstance(StockerApp::class.java)
                     log.warn("quote backoff: failures=$consecutiveFailures, next=${delaySec}s")
                 }
-            } else if (consecutiveFailures > 0) {
-                val log = Logger.getInstance(StockerApp::class.java)
-                log.info("quote recovered after $consecutiveFailures failures")
-                consecutiveFailures = 0
-                skipUntil = Instant.MIN
+                publishStatus(if (consecutiveFailures >= 3) StockerRefreshState.BACKOFF
+                              else if (offHours) StockerRefreshState.OFF_HOURS
+                              else StockerRefreshState.LIVE)
+            } else {
+                if (consecutiveFailures > 0) {
+                    val log = Logger.getInstance(StockerApp::class.java)
+                    log.info("quote recovered after $consecutiveFailures failures")
+                    consecutiveFailures = 0
+                    skipUntil = Instant.MIN
+                }
+                lastSuccessAt = Instant.now()
+                publishStatus(if (offHours) StockerRefreshState.OFF_HOURS else StockerRefreshState.LIVE)
             }
+    }
+
+    private fun publishStatus(state: StockerRefreshState) {
+        try {
+            messageBus.syncPublisher(REFRESH_STATUS_TOPIC)
+                .statusChanged(StockerRefreshStatus(state, setting.refreshInterval, lastSuccessAt))
+        } catch (e: Exception) {
+            Logger.getInstance(StockerApp::class.java).warn("status publish failed", e)
+        }
     }
 
     /**
