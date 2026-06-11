@@ -91,12 +91,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
     private val healthRenderer: StockerDefaultTableCellRender = StockerHealthCellRenderer()
     private val distanceRenderer: StockerDefaultTableCellRender = StockerDistanceCellRenderer()
 
-    // Sorting state
-    private var headerRenderer: StockerTableHeaderRender? = null
-    private var lastSortColumn: Int = -1
-    private var currentSortState: StockerSortState = StockerSortState.NONE
-    // Backup data only when sorting is active (cleared when returning to NONE state)
-    private var sortBackupData: MutableList<Array<Any?>>? = null
+    private var sortController: StockerTableSortController? = null
     private var popupTargetCode: String? = null
     private var popupTargetName: String? = null
 
@@ -127,8 +122,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
         // Clear data structures to help with garbage collection
         (indices as? MutableList<*>)?.clear()
         indices = emptyList()
-        sortBackupData?.clear()
-        sortBackupData = null
+        sortController?.dispose()
 
         // Clear table model
         if (::tbModel.isInitialized) {
@@ -343,13 +337,14 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
         tbBody.tableHeader.reorderingAllowed = false
         tbBody.tableHeader.preferredSize = Dimension(tbBody.tableHeader.width, 30)
         tbBody.tableHeader.border = BorderFactory.createEmptyBorder()
-        headerRenderer = StockerTableHeaderRender().also { tbBody.tableHeader.defaultRenderer = it }
+        val headerRenderer = StockerTableHeaderRender().also { tbBody.tableHeader.defaultRenderer = it }
+        sortController = StockerTableSortController(tbBody, tbModel, headerRenderer)
 
         // Add header click listener for sorting with visual feedback
         tbBody.tableHeader.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
                 val column = tbBody.tableHeader.columnAtPoint(e.point)
-                if (column != -1) sortByColumn(column)
+                if (column != -1) sortController?.sortByColumn(column)
             }
             override fun mouseEntered(e: MouseEvent) {
                 tbBody.tableHeader.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
@@ -675,126 +670,7 @@ class StockerTableView(private val readOnly: Boolean = false) : Disposable {
      * Should be called when table data is externally modified.
      */
     fun clearSortState() {
-        currentSortState = StockerSortState.NONE
-        lastSortColumn = -1
-        sortBackupData?.clear()
-        sortBackupData = null
-        headerRenderer?.setSortState(-1, StockerSortState.NONE)
-        if (::tbBody.isInitialized && tbBody.tableHeader != null) {
-            tbBody.tableHeader.repaint()
-        }
-    }
-
-    private fun sortByColumn(column: Int) {
-        val columnName = tbBody.getColumnName(column)
-
-        // Cycle through sort states: NONE -> ASCENDING -> DESCENDING -> NONE
-        if (column == lastSortColumn) {
-            currentSortState = when (currentSortState) {
-                StockerSortState.NONE -> StockerSortState.ASCENDING
-                StockerSortState.ASCENDING -> StockerSortState.DESCENDING
-                StockerSortState.DESCENDING -> StockerSortState.NONE
-            }
-        } else {
-            lastSortColumn = column
-            currentSortState = StockerSortState.ASCENDING
-        }
-
-        headerRenderer?.setSortState(column, currentSortState)
-        tbBody.tableHeader.repaint()
-        sortTableData(columnName, currentSortState)
-    }
-
-    /**
-     * Sort visible rows by `columnName` in the given direction, or restore the original order
-     * when state == NONE. Keeps a single backup of the unsorted row data while sorting is
-     * active so the user can cycle ASC→DESC→NONE without losing original order. Note: this
-     * does a full row-copy on each call; for very large tables consider a TableRowSorter.
-     */
-    private fun sortTableData(columnName: String, sortState: StockerSortState) {
-        val rowCount = tbModel.rowCount
-        if (rowCount == 0) return
-
-        // For NONE state, restore original data and clear backup
-        if (sortState == StockerSortState.NONE) {
-            val backup = sortBackupData
-            if (backup != null && backup.isNotEmpty()) {
-                tbModel.rowCount = 0
-                for (row in backup) tbModel.addRow(row)
-                backup.clear()
-                sortBackupData = null
-            }
-            return
-        }
-
-        // Capture original data before first sort (only once)
-        if (sortBackupData == null) {
-            val captured = ArrayList<Array<Any?>>(rowCount)
-            for (i in 0 until rowCount) {
-                val row = arrayOfNulls<Any?>(tbModel.columnCount)
-                for (j in 0 until tbModel.columnCount) row[j] = tbModel.getValueAt(i, j)
-                captured.add(row)
-            }
-            sortBackupData = captured
-        }
-
-        // Get the column index in the model
-        var columnIndex = -1
-        for (i in 0 until tbModel.columnCount) {
-            if (tbModel.getColumnName(i) == columnName) {
-                columnIndex = i
-                break
-            }
-        }
-        if (columnIndex == -1) return
-
-        // Skip sorting for non-sortable columns (sparkline, health, distance)
-        if (columnName == SPARKLINE_COL || columnName == HEALTH_COL || columnName == DISTANCE_COL) return
-
-        val sortColumnIndex = columnIndex
-        val ascending = sortState == StockerSortState.ASCENDING
-
-        // Sort indices based on values - only references are sorted, not actual data
-        val sortedIndices = (0 until rowCount).sortedWith(Comparator { i1, i2 ->
-            val val1 = tbModel.getValueAt(i1, sortColumnIndex)
-            val val2 = tbModel.getValueAt(i2, sortColumnIndex)
-            val result = when (columnName) {
-                CODE_COL, NAME_COL -> {
-                    val s1 = val1?.toString() ?: ""
-                    val s2 = val2?.toString() ?: ""
-                    s1.compareTo(s2, ignoreCase = true)
-                }
-                PERCENT_COL -> {
-                    val p1 = StockerCellValues.parsePercentage(val1?.toString())
-                    val p2 = StockerCellValues.parsePercentage(val2?.toString())
-                    compareNullable(p1, p2)
-                }
-                else -> {
-                    val n1 = StockerCellValues.parseDouble(val1)
-                    val n2 = StockerCellValues.parseDouble(val2)
-                    compareNullable(n1, n2)
-                }
-            }
-            if (ascending) result else -result
-        })
-
-        // Reorder rows based on sorted indices
-        val sortedRows = ArrayList<Array<Any?>>(rowCount)
-        for (sourceIndex in sortedIndices) {
-            val row = arrayOfNulls<Any?>(tbModel.columnCount)
-            for (j in 0 until tbModel.columnCount) row[j] = tbModel.getValueAt(sourceIndex, j)
-            sortedRows.add(row)
-        }
-
-        tbModel.rowCount = 0
-        for (row in sortedRows) tbModel.addRow(row)
-    }
-
-    private fun <T : Comparable<T>> compareNullable(a: T?, b: T?): Int = when {
-        a != null && b != null -> a.compareTo(b)
-        a != null -> 1
-        b != null -> -1
-        else -> 0
+        sortController?.clearSortState()
     }
 
     companion object {
