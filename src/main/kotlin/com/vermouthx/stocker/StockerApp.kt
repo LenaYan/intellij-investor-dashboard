@@ -101,14 +101,30 @@ class StockerApp {
     /**
      * Consolidated update thread that fetches all market data once and publishes to all relevant topics.
      * This eliminates redundant HTTP requests that were previously made by separate per-market tasks.
+     *
+     * The body is guarded as a whole: scheduleAtFixedRate cancels all future runs after the
+     * first uncaught exception, and syncPublisher runs listeners synchronously on this thread,
+     * so an unguarded listener bug would silently kill the refresh loop forever.
      */
     private fun createConsolidatedUpdateThread(): Runnable {
         return Runnable {
+            try {
+                consolidatedTick()
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+            } catch (e: Exception) {
+                Logger.getInstance(StockerApp::class.java)
+                    .warn("consolidated quote tick failed; refresh loop continues", e)
+            }
+        }
+    }
+
+    private fun consolidatedTick() {
             if (pauseState == State.PAUSED) {
-                return@Runnable
+                return
             }
             if (!shouldContinueRefresh()) {
-                return@Runnable
+                return
             }
 
             val now = Instant.now()
@@ -117,14 +133,14 @@ class StockerApp {
                 val skipThisTick = offHoursTickCounter % ticksPerMinute != 0L
                 offHoursTickCounter++
                 if (skipThisTick) {
-                    return@Runnable
+                    return
                 }
             } else {
                 offHoursTickCounter = 0
             }
 
             if (now.isBefore(skipUntil)) {
-                return@Runnable
+                return
             }
 
             val quoteProvider = setting.quoteProvider
@@ -139,16 +155,16 @@ class StockerApp {
             val futuresCodes = setting.codesByMarket(StockerMarketType.Futures)
 
             // Fetch all market data
-            val aShareResult     = fetchQuotesIfActive(StockerMarketType.AShare,   quoteProvider,        aShareCodes)  ?: return@Runnable
-            val hkStocksResult   = fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider,        hkCodes)      ?: return@Runnable
-            val usStocksResult   = fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider,        usCodes)      ?: return@Runnable
-            val cryptoResult     = fetchQuotesIfActive(StockerMarketType.Crypto,   cryptoQuoteProvider,  cryptoCodes)  ?: return@Runnable
-            val futuresResult    = fetchQuotesIfActive(StockerMarketType.Futures,  StockerQuoteProvider.SINA, futuresCodes) ?: return@Runnable
+            val aShareResult     = fetchQuotesIfActive(StockerMarketType.AShare,   quoteProvider,        aShareCodes)  ?: return
+            val hkStocksResult   = fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider,        hkCodes)      ?: return
+            val usStocksResult   = fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider,        usCodes)      ?: return
+            val cryptoResult     = fetchQuotesIfActive(StockerMarketType.Crypto,   cryptoQuoteProvider,  cryptoCodes)  ?: return
+            val futuresResult    = fetchQuotesIfActive(StockerMarketType.Futures,  StockerQuoteProvider.SINA, futuresCodes) ?: return
 
-            val aShareIdxResult  = fetchQuotesIfActive(StockerMarketType.AShare,   quoteProvider,        StockerMarketIndex.CN.codes)     ?: return@Runnable
-            val hkStocksIdxResult= fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider,        StockerMarketIndex.HK.codes)     ?: return@Runnable
-            val usStocksIdxResult= fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider,        StockerMarketIndex.US.codes)     ?: return@Runnable
-            val cryptoIdxResult  = fetchQuotesIfActive(StockerMarketType.Crypto,   cryptoQuoteProvider,  StockerMarketIndex.Crypto.codes) ?: return@Runnable
+            val aShareIdxResult  = fetchQuotesIfActive(StockerMarketType.AShare,   quoteProvider,        StockerMarketIndex.CN.codes)     ?: return
+            val hkStocksIdxResult= fetchQuotesIfActive(StockerMarketType.HKStocks, quoteProvider,        StockerMarketIndex.HK.codes)     ?: return
+            val usStocksIdxResult= fetchQuotesIfActive(StockerMarketType.USStocks, quoteProvider,        StockerMarketIndex.US.codes)     ?: return
+            val cryptoIdxResult  = fetchQuotesIfActive(StockerMarketType.Crypto,   cryptoQuoteProvider,  StockerMarketIndex.Crypto.codes) ?: return
 
             val allResults = listOf(
                 aShareResult, hkStocksResult, usStocksResult, cryptoResult, futuresResult,
@@ -167,7 +183,7 @@ class StockerApp {
             val cryptoIndices   = cryptoIdxResult.getOrDefault(emptyList())
 
             if (!shouldContinueRefresh()) {
-                return@Runnable
+                return
             }
 
             // Publish to ALL topic only — per-market topics are removed
@@ -193,24 +209,35 @@ class StockerApp {
                 consecutiveFailures = 0
                 skipUntil = Instant.MIN
             }
-
-        }
     }
 
     /**
      * Independent 60s intraday update: viewport + cache aware. Skipped entirely
-     * when paused or when no relevant market is open.
+     * when paused or when no relevant market is open. Guarded like the
+     * consolidated tick: an uncaught exception would cancel the schedule.
      */
     private fun createIntradayUpdateThread(): Runnable {
         return Runnable {
-            if (pauseState == State.PAUSED) return@Runnable
-            if (!shouldContinueRefresh()) return@Runnable
+            try {
+                intradayTick()
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+            } catch (e: Exception) {
+                Logger.getInstance(StockerApp::class.java)
+                    .warn("intraday tick failed; refresh loop continues", e)
+            }
+        }
+    }
+
+    private fun intradayTick() {
+            if (pauseState == State.PAUSED) return
+            if (!shouldContinueRefresh()) return
 
             val now = Instant.now()
-            if (!anyRelevantMarketOpen(now)) return@Runnable
+            if (!anyRelevantMarketOpen(now)) return
 
             val visible = StockerTableView.visibleCodesByMarket()
-            if (visible.isEmpty()) return@Runnable
+            if (visible.isEmpty()) return
 
             val toBroadcast = HashMap<String, com.vermouthx.stocker.entities.StockerIntradayData>()
             val intradayMarkets = setOf(
@@ -225,7 +252,7 @@ class StockerApp {
                 // different market (e.g. US evening session); minute data for a closed
                 // market is static, so skip the fetch for it.
                 if (StockerMarketSession.of(market)?.isOpen(now) != true) continue
-                if (!shouldContinueRefresh()) return@Runnable
+                if (!shouldContinueRefresh()) return
 
                 val hits = HashMap<String, com.vermouthx.stocker.entities.StockerIntradayData>()
                 val miss = ArrayList<String>()
@@ -257,7 +284,6 @@ class StockerApp {
                 keep.addAll(setting.codesByMarket(StockerMarketType.USStocks))
                 StockerIntradayCache.evict(keep)
             }
-        }
     }
 
     /**
